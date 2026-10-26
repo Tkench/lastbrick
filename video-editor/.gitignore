@@ -1,0 +1,11 @@
+# Keep large media out of git. Folders stay via .gitkeep.
+footage/*
+references/*
+exports/*
+!footage/.gitkeep
+!references/.gitkeep
+!exports/.gitkeep
+
+# Working files the agent creates
+work/
+*.wav

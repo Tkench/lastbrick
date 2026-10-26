@@ -53,3 +53,13 @@ Free Supabase projects pause after about a week with no activity; if that happen
 
 Parts lists and pictures: [Rebrickable](https://rebrickable.com). Piece recognition: [Brickognize](https://brickognize.com).
 LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.
+
+## Versions
+
+The version is `APP_VERSION` near the top of `app.js` (shown at the bottom of Settings and sent with problem reports). It is **MAJOR.MINOR.PATCH**:
+
+- **Major** (1.x.x → 2.0.0): a big change in how the app works.
+- **Minor** (1.0.0 → 1.1.0): a new feature people can see.
+- **Patch** (1.1.0 → 1.1.1): a fix or small tweak.
+
+With every change, raise `APP_VERSION` and `APP_DATE` in `app.js` **and** the cache name (`brickfinder-shell-vNN`) in `sw.js`, so phones pick up the update.

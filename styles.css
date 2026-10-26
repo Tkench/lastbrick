@@ -713,3 +713,4 @@ body.welcome .topbar {
 .mail-steps small { display: block; color: #6b6b76; font-size: 13px; margin-top: 2px; }
 .mail-sheet .btn { font-size: 17px; }
 .mail-sheet .foot { font-size: 13px; color: var(--muted); margin: 12px 0 0; }
+.app-version { margin: 12px 0 0; text-align: center; letter-spacing: .02em; }

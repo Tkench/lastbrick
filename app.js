@@ -18,6 +18,12 @@ const TIP_URL = '';
 // Supabase project for login, backup and sync (see supabase/setup.sql). The
 // "anon" key is meant to be public: row-level security keeps each person's
 // data private. Accounts stay hidden while these are empty.
+// App version, shown at the bottom of Settings and sent with problem reports.
+// MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
+// patch = fix or small tweak. Raise it (and the date) with every change, together
+// with the cache name in sw.js, so phones pick up the new version.
+const APP_VERSION = '1.0.0';
+const APP_DATE = '2026-10-26';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
 // Cloudflare Web Analytics (cookie-free visitor stats). Paste the site's token here
@@ -3383,7 +3389,7 @@ const REPORT_LABELS = {
 };
 
 function showReportSheet({ kind, title, intro, context = {}, photoUrl = '' }) {
-  const ctx = { ...context, screen: `${innerWidth}×${innerHeight}`, browser: navigator.userAgent.slice(0, 160) };
+  const ctx = { ...context, version: APP_VERSION, screen: `${innerWidth}×${innerHeight}`, browser: navigator.userAgent.slice(0, 160) };
   const lines = Object.entries(context).filter(([, v]) => v !== undefined && v !== '' && !(Array.isArray(v) && !v.length))
     .map(([k, v]) => `${REPORT_LABELS[k] || k}: ${Array.isArray(v) ? v.map((x) => (typeof x === 'object' ? `${x.name} (${x.id}, ${x.sure})` : x)).join('; ') : v}`);
   openSheet(`
@@ -3686,6 +3692,7 @@ function renderSettings() {
       <h2 style="color:var(--text)">About</h2>
       <p>Parts lists and pictures: <a href="https://rebrickable.com" target="_blank" rel="noopener">Rebrickable</a>. Piece recognition: <a href="https://brickognize.com" target="_blank" rel="noopener">Brickognize</a>. LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.</p>
       <p><a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Use</a> · <a href="mailto:hello@lastbrick.co.uk">hello@lastbrick.co.uk</a></p>
+      <p class="app-version">Last Brick ${APP_VERSION} · ${new Date(APP_DATE + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
     </div>`;
   $('#saveKey').onclick = () => {
     state.apiKey = $('#keyInput').value.trim(); save();

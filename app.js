@@ -608,11 +608,15 @@ function rarityOf(all) {
   return (w) => Math.log((wordRarity.total + 1) / ((wordRarity.seen.get(w) || 0) + 1));
 }
 
-// The scanner's words with how much each counts. BrickLink starts many names with
-// a category ("Police - City Burglar"), which counts for much less.
+// The scanner's words with how much each counts. BrickLink starts some names with
+// a broad category ("Police - City Burglar"); those category words count for much
+// less. Other names put the figure first ("Rebel Fleet Trooper - Plain Vest"), so
+// only these generic words are played down.
+const CATEGORY_WORDS = new Set(['police', 'town', 'city', 'castle', 'space', 'classic', 'pirates', 'train', 'sports',
+  'studios', 'collectible', 'collectable', 'minifigures', 'adventurers', 'western', 'paradisa', 'islanders']);
 function scannerWords(name, rarity) {
   const dash = name.indexOf(' - ');
-  const category = dash > 0 ? new Set(nameWords(name.slice(0, dash)).map(canon)) : new Set();
+  const category = new Set((dash > 0 ? nameWords(name.slice(0, dash)) : []).filter((w) => CATEGORY_WORDS.has(w)).map(canon));
   const words = [...new Set(nameWords(name).map(canon))];
   return words.map((w) => ({ w, weight: rarity(w) * (category.has(w) ? 0.25 : 1) }));
 }
@@ -2023,6 +2027,10 @@ function renderFigOutInner() {
   if (a.step === 'guesses') {
     const what = a.scanKind === 'fig' ? 'figure' : 'piece';
     h += `<h3 class="steps-title">Which ${what} is it?</h3><p class="muted small">Tap the one that looks like yours.</p>`;
+    const best = a.guesses[0]?.score || 0;
+    if (best && best < 0.6) {
+      h += `<div class="verdict-card no"><span class="verdict-ico">🤔</span><div><b>The scanner isn't sure (${Math.round(best * 100)}%)</b><span>Check the other guesses below, or try another photo: closer up, on plain paper, in good light.</span></div></div>`;
+    }
     h += a.guesses.map((g, i) => `
       <button class="match-card guess" data-guess="${i}">
         <div class="match-head">
@@ -2194,11 +2202,16 @@ function bindAddFig() {
           found = found.filter((f) => f.exact || nameScore(want, f.name) > 0);
           const seen = new Set(found.map((f) => f.set_num));
           const byName = (await figsByName(g.name)).filter((f) => !seen.has(f.set_num));
-          const results = [...found.filter((f) => f.exact), ...[...found.filter((f) => !f.exact), ...byName]
-            .sort((a, b) => nameScore(want, b.name) - nameScore(want, a.name))];
+          // A figure found through its own packet is only a sure match when the scanner
+          // says it's a collectable minifigure (BrickLink numbers those "col…"): the
+          // same name can also be a figure from an ordinary set (e.g. "Ice Fisherman").
+          const collectable = /^col/i.test(g.id);
+          const ranked = (list) => list.sort((a, b) => nameScore(want, b.name) - nameScore(want, a.name) || a.name.length - b.name.length);
+          const results = collectable
+            ? [...found.filter((f) => f.exact), ...ranked([...found.filter((f) => !f.exact), ...byName])]
+            : ranked([...found, ...byName]);
           if (!results.length) return noFigs("Couldn't find that figure", 'Try another match, or scan one of its pieces instead (a printed torso works best).');
-          // A figure found through its own packet (collectable series) is a sure match.
-          const sure = found.filter((f) => f.exact);
+          const sure = collectable ? found.filter((f) => f.exact) : [];
           const pick = sure.length === 1 ? sure[0] : null;
           if (pick) { figAdd.step = 'guesses'; showFigPreview(pick.set_num, pick.set_img_url || g.img_url); return; }
           Object.assign(figAdd, {

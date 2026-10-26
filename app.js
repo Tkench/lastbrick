@@ -22,8 +22,8 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.0.0';
-const APP_DATE = '2026-10-26';
+const APP_VERSION = '1.1.0';
+const APP_DATE = '2026-10-27';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
 // Cloudflare Web Analytics (cookie-free visitor stats). Paste the site's token here
@@ -965,14 +965,14 @@ window.addEventListener('hashchange', () => { closeSheet(); render(); window.scr
 
 function render() {
   const r = route();
-  const sub = r.name === 'set' || r.name === 'add' || r.name === 'addfig' || r.name === 'stats';
-  const tab = r.name === 'stats' ? 'settings' : sub ? 'sets' : r.name;
+  const sub = r.name === 'set' || r.name === 'add' || r.name === 'addfig' || r.name === 'stats' || r.name === 'help';
+  const tab = r.name === 'stats' || r.name === 'help' ? 'settings' : sub ? 'sets' : r.name;
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   const back = $('#backBtn');
   back.classList.toggle('hidden', !sub);
   $('#delBtn').classList.add('hidden'); // renderSet shows it for the open set
 
-  if (r.name !== 'settings' && (needsOwnKey() || (!state.welcomed && !Object.keys(state.sets).length))) return renderWelcome();
+  if (r.name !== 'settings' && r.name !== 'help' && (needsOwnKey() || (!state.welcomed && !Object.keys(state.sets).length))) return renderWelcome();
 
   switch (r.name) {
     case 'set': return renderSet(r.arg);
@@ -982,6 +982,7 @@ function render() {
     case 'scan': return renderScan();
     case 'settings': return renderSettings();
     case 'stats': return renderStats();
+    case 'help': return renderHelp();
     default: return renderSets();
   }
 }
@@ -3654,28 +3655,25 @@ function renderSettings() {
   const sets = sortedSets();
   $('#view').innerHTML = `
     ${syncEnabled() ? '<div class="card" id="accountCard"></div>' : ''}
-    ${helperAvailable() ? `<details class="card advanced">
-      <summary>Advanced: your own Rebrickable key</summary>
-      <p class="muted small">Not needed — Last Brick looks up parts lists for you. If you have your own key from <a href="https://rebrickable.com/users/profile/settings/#api" target="_blank" rel="noopener">rebrickable.com</a>, it's only used as a backup if our lookup service is unavailable.</p>
-      <input class="field" id="keyInput" value="${esc(state.apiKey)}" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste API key here (optional)">
-      <p></p>
-      <button class="btn block" id="saveKey">Save key</button>
-    </details>` : `<div class="card">
+    ${helperAvailable() ? '' : `<div class="card">
       <h2>Rebrickable API key</h2>
       <p class="muted small">Free from <a href="https://rebrickable.com/users/profile/settings/#api" target="_blank" rel="noopener">rebrickable.com → Settings → API</a>.</p>
       <input class="field" id="keyInput" value="${esc(state.apiKey)}" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste API key here">
       <p></p>
       <button class="btn primary block" id="saveKey">Save key</button>
     </div>`}
-    <div class="card">
-      <h2>Backup file</h2>
+    <div class="card help-link">
+      <a class="btn block" href="#help">❓ Help &amp; FAQ</a>
+    </div>
+    <details class="card advanced" id="backupCard">
+      <summary>Backup file</summary>
       <p class="muted small">${session ? 'Your sets are backed up online automatically. You can also keep a copy as a file.' : 'Your ticks are saved on this phone only. Download a backup now and then, or use it to move to a new phone.'} (${[plural(sets.filter((x) => !isFig(x)).length, 'set', 'sets'), sets.some(isFig) && plural(sets.filter(isFig).length, 'minifigure', 'minifigures')].filter(Boolean).join(' and ')} saved.)</p>
       <div class="row">
         <button class="btn grow" id="exportBtn">⬇️ Download backup</button>
         <button class="btn grow" id="importBtn">⬆️ Restore backup</button>
       </div>
       <input type="file" id="importFile" accept="application/json,.json" hidden>
-    </div>
+    </details>
     ${TIP_URL ? `
     <div class="card">
       <h2>☕ Support Last Brick</h2>
@@ -3694,7 +3692,7 @@ function renderSettings() {
       <p><a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Use</a> · <a href="mailto:hello@lastbrick.co.uk">hello@lastbrick.co.uk</a></p>
       <p class="app-version">Last Brick ${APP_VERSION} · ${new Date(APP_DATE + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
     </div>`;
-  $('#saveKey').onclick = () => {
+  if ($('#saveKey')) $('#saveKey').onclick = () => {
     state.apiKey = $('#keyInput').value.trim(); save();
     toast(state.apiKey ? 'Key saved' : 'Key removed');
   };
@@ -3856,6 +3854,47 @@ function renderAccountCard() {
       });
     } catch (err) { toast(err.message); }
   };
+}
+
+/* ---------- Help & FAQ ---------- */
+const FAQ = [
+  ['What is Last Brick?',
+    "Last Brick helps you rebuild LEGO® sets from a box of mixed bricks. Add a set and you get its full parts list. Tick off pieces as you find them, and the <b>Looking for</b> tab shows what's still missing across all your sets."],
+  ['Is it free?',
+    "Yes. Last Brick is free to use. Without an account you can save one set or minifigure to try it out. Create a free account to save as many as you like."],
+  ['Why do I need an account?',
+    "Your account backs up your sets online, so they're safe if you lose or change your phone, and lets you use Last Brick on more than one device. We only ask for an email and password."],
+  ['How does scanning work?',
+    "Tap <b>Scan</b> and take a photo of one piece on a plain background. Last Brick recognises it and shows which of your sets need it, so you can tick it off. For best results, scan one piece at a time in good light."],
+  ['How do I add a minifigure?',
+    "On the <b>Sets</b> tab, switch to <b>Minifigures</b> and tap <b>Add a minifigure</b>. Choose <b>Scan whole figure</b>, or <b>Scan one piece</b> such as the torso or legs. Printed torsos usually point to just one or two figures. If you've got the set a figure came in, Last Brick offers to move it into that set."],
+  ["The scan picked the wrong piece or figure. What now?",
+    "Try again with a plainer background and better light, or turn the piece to show its most distinctive side. For minifigures, scanning the torso on its own often works best. If it's still wrong, tap <b>Wrong match? Tell us</b> so we can improve it."],
+  ['How do I put Last Brick on my home screen?',
+    "<b>iPhone:</b> open lastbrick.co.uk in Safari, tap the Share button, then <b>Add to Home Screen</b>.<br><b>Android:</b> open it in Chrome, tap the ⋮ menu, then <b>Add to Home screen</b> or <b>Install app</b>.<br>It then opens like a normal app."],
+  ["I confirmed my email but I'm not logged in on my phone.",
+    "On iPhone the link in the email opens in Safari, which is kept separate from the app on your home screen. Open Last Brick from your home screen and log in with the same email and password."],
+  ['Does it work without signal?',
+    "Your sets and ticks open without signal. Adding new sets and scanning need an internet connection."],
+  ['Is Last Brick made by LEGO?',
+    "No. Last Brick is an independent app. LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse it. Parts lists come from Rebrickable and piece recognition from Brickognize."],
+  ['How do I delete my account?',
+    "Go to <b>Settings</b>, log in, and tap <b>Delete my account</b> at the bottom of the account box. This removes your login and your online backup for good."],
+];
+
+function renderHelp() {
+  setTitle('Help & FAQ');
+  $('#view').innerHTML = `
+    <div class="faq">
+      ${FAQ.map(([q, a]) => `<details class="card faq-item"><summary>${esc(q)}</summary><p>${a}</p></details>`).join('')}
+    </div>
+    <div class="card center">
+      <h2>Still stuck?</h2>
+      <p class="muted small">Tell us what's happening and we'll take a look.</p>
+      ${syncEnabled() ? '<button class="btn primary block" id="helpReport">Report a problem</button><p></p>' : ''}
+      <a class="btn block" href="mailto:hello@lastbrick.co.uk">Email hello@lastbrick.co.uk</a>
+    </div>`;
+  if ($('#helpReport')) $('#helpReport').onclick = () => showReportSheet({ kind: 'general', title: 'Report a problem', context: { page: 'Help' } });
 }
 
 /* ---------- Boot ---------- */

@@ -714,3 +714,10 @@ body.welcome .topbar {
 .mail-sheet .btn { font-size: 17px; }
 .mail-sheet .foot { font-size: 13px; color: var(--muted); margin: 12px 0 0; }
 .app-version { margin: 12px 0 0; text-align: center; letter-spacing: .02em; }
+.help-link { padding: 12px; }
+.faq-item { padding: 0; }
+.faq-item summary { cursor: pointer; font-weight: 700; padding: 14px 40px 14px 16px; list-style: none; position: relative; line-height: 1.35; }
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after { content: '+'; position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: 22px; font-weight: 700; color: var(--brand); }
+.faq-item[open] summary::after { content: '−'; }
+.faq-item p { margin: 0; padding: 0 16px 16px; line-height: 1.5; }

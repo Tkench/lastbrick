@@ -356,11 +356,15 @@ async function handleAuthRedirect() {
     render();
     savePref('pendingEmail', '');
     const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-    openSheet(`
-      <h2>✅ Email confirmed</h2>
-      <p>You're logged in here.</p>
-      ${installed ? '' : '<p><b>Using Last Brick from your home screen?</b> Open it there and log in with the same email and password. The home-screen app is kept separate from this browser.</p>'}
-      <button class="btn primary block" data-close>OK</button>`);
+    mailSheet({
+      art: 'done', title: 'Email confirmed', lead: "You're logged in and your sets are backed up.",
+      steps: installed ? [] : [[
+        '<b>Using Last Brick from your home screen?</b>',
+        'Open it there and log in with the same email and password. It is kept separate from this browser.',
+        PHONE_ICON,
+      ]],
+      button: 'Start building',
+    });
   }
 }
 
@@ -902,6 +906,35 @@ function askConfirm({ title, text = '', ok = 'OK', danger = false }) {
       resolve(answer === 'yes');
     };
   });
+}
+
+/* ---------- Account pop-ups ---------- */
+// Pictures for the account pop-ups: an envelope, or a green tick, with a red brick on top.
+const BRICK_ON_TOP = `<g transform="translate(76 2)"><rect x="0" y="10" width="44" height="22" rx="4" fill="#d01012"/>
+  <rect x="5" y="3" width="12" height="8" rx="2" fill="#d01012"/><rect x="27" y="3" width="12" height="8" rx="2" fill="#d01012"/>
+  <rect x="4" y="14" width="36" height="3" rx="1.5" fill="#fff" opacity=".35"/></g>`;
+const MAIL_ART = {
+  mail: `<svg class="mail-art" viewBox="0 0 132 100" aria-hidden="true">
+    <rect x="10" y="22" width="112" height="72" rx="12" fill="#fff" stroke="#d01012" stroke-width="4"/>
+    <path d="M14 28 L66 64 L118 28" fill="none" stroke="#d01012" stroke-width="4" stroke-linejoin="round"/>${BRICK_ON_TOP}</svg>`,
+  done: `<svg class="mail-art" viewBox="0 0 132 100" aria-hidden="true">
+    <circle cx="62" cy="58" r="38" fill="#1f8a3a"/>
+    <path d="M44 58 L57 71 L82 45" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>${BRICK_ON_TOP}</svg>`,
+};
+const PHONE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18h3"/></svg>';
+
+// steps: [[html, smallPrint?, icon?], …] (numbered 1, 2, 3 unless an icon is given)
+function mailSheet({ art = 'mail', title, lead = '', email = '', steps = [], button = 'Got it', foot = '' }) {
+  openSheet(`<div class="mail-sheet">
+    ${MAIL_ART[art]}
+    <h2>${title}</h2>
+    ${lead ? `<p class="lead">${lead}</p>` : ''}
+    ${email ? `<div class="mail-to">${esc(email)}</div>` : ''}
+    ${steps.length ? `<ol class="mail-steps">${steps.map(([text, small, icon], i) =>
+      `<li><span class="n">${icon || i + 1}</span><span>${text}${small ? `<small>${small}</small>` : ''}</span></li>`).join('')}</ol>` : ''}
+    <button class="btn primary block" data-close>${button}</button>
+    ${foot ? `<p class="foot">${foot}</p>` : ''}
+  </div>`);
 }
 
 function closeSheet() {
@@ -3786,12 +3819,15 @@ function renderAccountCard() {
       } else {
         busy(false);
         savePref('pendingEmail', c.email);
-        openSheet(`
-          <h2>📧 Check your email</h2>
-          <p>We've sent a link to <b>${esc(c.email)}</b>. Tap it to confirm your account.</p>
-          <p><b>Then come back to Last Brick and log in</b> with this email and password. (On an iPhone the link may open in Safari, which is separate from the app on your home screen.)</p>
-          <p class="muted small">Can't see it? Check your spam folder.</p>
-          <button class="btn block" data-close>OK</button>`);
+        mailSheet({
+          title: 'Check your email', lead: "We've sent a link to", email: c.email,
+          steps: [
+            ['Open the email from <b>Last Brick</b>'],
+            ['Tap <b>Confirm my email</b>'],
+            ['Come back here and <b>log in</b>', 'On iPhone the link may open in Safari. Log in again in the app on your home screen.'],
+          ],
+          foot: "Can't find it? Check your spam folder.",
+        });
       }
     } catch (e) { toast(e.message); busy(false); }
   };
@@ -3802,7 +3838,15 @@ function renderAccountCard() {
     if (!/^\S+@\S+\.\S+$/.test(email)) return toast('Type your email address first');
     try {
       await sbFetch('/auth/v1/recover?redirect_to=' + encodeURIComponent(appUrl()), { method: 'POST', body: { email } });
-      toast('Check your email for a link to reset your password');
+      mailSheet({
+        title: 'Reset your password', lead: "If there's an account for this address, we've sent a link to", email,
+        steps: [
+          ['Open the email from <b>Last Brick</b>'],
+          ['Tap <b>Choose a new password</b>'],
+          ['Type your new password and <b>save</b>', 'On iPhone the link may open in Safari. Afterwards, log in on the home-screen app with your new password.'],
+        ],
+        foot: "Can't find it? Check your spam folder.",
+      });
     } catch (err) { toast(err.message); }
   };
 }

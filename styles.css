@@ -699,3 +699,17 @@ body.welcome .topbar {
 .src-bar { height: 8px; background: var(--chip); border-radius: 4px; margin-top: 4px; overflow: hidden; }
 .src-bar span { display: block; height: 100%; background: var(--brand); border-radius: 4px; }
 .notice-ok { background: var(--ok-bg); color: var(--ok); border-radius: 10px; padding: 8px 10px; }
+
+/* Account pop-ups: "Check your email", "Email confirmed", password reset */
+.mail-sheet { text-align: center; padding: 6px 4px 2px; }
+.mail-art { width: 132px; height: 100px; margin: 4px auto 6px; display: block; }
+.mail-sheet h2 { margin: 4px 0 6px; font-size: 24px; }
+.mail-sheet .lead { margin: 0 0 4px; color: var(--muted); }
+.mail-to { display: inline-block; background: var(--card); border: 2px solid var(--line); border-radius: 999px; padding: 6px 14px; font-weight: 700; margin: 2px 0 16px; word-break: break-all; }
+.mail-steps { list-style: none; margin: 12px 0 16px; padding: 0; text-align: left; display: grid; gap: 8px; }
+.mail-steps li { display: flex; align-items: center; gap: 12px; background: #fdecec; border: 2px solid #f5b5b5; border-radius: 14px; padding: 10px 12px; line-height: 1.35; color: #1b1b1f; }
+.mail-steps .n { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--brand); color: #fff; font-weight: 800; display: grid; place-items: center; }
+.mail-steps .n svg { width: 18px; height: 18px; }
+.mail-steps small { display: block; color: #6b6b76; font-size: 13px; margin-top: 2px; }
+.mail-sheet .btn { font-size: 17px; }
+.mail-sheet .foot { font-size: 13px; color: var(--muted); margin: 12px 0 0; }

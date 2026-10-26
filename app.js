@@ -184,10 +184,23 @@ async function register(email, password) {
   return false;
 }
 
+// Logging out removes this account's sets from the phone (they're in the online
+// backup), so the next person to log in here never sees or changes them.
 function logOut() {
   if (session) sbFetch('/auth/v1/logout', { method: 'POST', auth: true }).catch(() => {});
   setSession(null);
   sync.error = '';
+  adminCheck = null;
+  clearLocalCollection();
+}
+
+function clearLocalCollection() {
+  state.sets = {};
+  state.deleted = {};
+  state.owner = null;
+  save({ fromSync: true }); // fromSync: these aren't deletions to send anywhere
+  lastSigs = new Map();
+  if (typeof resetFigAdd === 'function') resetFigAdd();
 }
 
 function mergeData(local, remote) {
@@ -239,8 +252,16 @@ async function syncOnce(uid) {
   const q = `user_id=eq.${encodeURIComponent(uid)}`;
   const rows = await sbFetch(`/rest/v1/user_data?select=data,version&${q}`, { auth: true });
   const row = rows && rows[0];
+  // Sets on this phone that belong to a different account are never mixed in: the
+  // phone switches to this account's backup instead. Sets added before logging in
+  // (no owner yet) are merged in, so a first set carries over to a new account.
+  if (state.owner && state.owner !== uid) {
+    state.sets = {};
+    state.deleted = {};
+  }
   const local = { apiKey: state.apiKey, sets: state.sets, deleted: state.deleted };
   const merged = row ? mergeData(local, row.data) : local;
+  if (state.owner !== uid) { state.owner = uid; save({ fromSync: true }); }
   if (JSON.stringify(merged) !== JSON.stringify(local)) {
     state.apiKey = merged.apiKey;
     state.sets = merged.sets;
@@ -331,9 +352,15 @@ async function handleAuthRedirect() {
     render();
     showNewPasswordSheet();
   } else {
-    toast('Email confirmed — you are logged in');
     await syncNow({ loud: true });
     render();
+    savePref('pendingEmail', '');
+    const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    openSheet(`
+      <h2>✅ Email confirmed</h2>
+      <p>You're logged in here.</p>
+      ${installed ? '' : '<p><b>Using Last Brick from your home screen?</b> Open it there and log in with the same email and password. The home-screen app is kept separate from this browser.</p>'}
+      <button class="btn primary block" data-close>OK</button>`);
   }
 }
 
@@ -3687,7 +3714,13 @@ function renderAccountCard() {
       <p class="small" style="margin-top:12px"><a href="#" id="deleteAcct" style="color:var(--miss)">Delete my account</a></p>`;
     $('#syncBtn').onclick = () => { syncNow({ loud: true }); renderAccountCard(); };
     $('#logoutBtn').onclick = async () => {
-      if (!await askConfirm({ title: 'Log out?', text: 'Your sets stay on this phone. Log in again any time to carry on backing up.', ok: 'Log out' })) return;
+      if (!await askConfirm({ title: 'Log out?', text: "Your sets and minifigures are backed up to your account and will be removed from this phone. Log in again any time to get them back.", ok: 'Log out' })) return;
+      await syncNow();
+      if (sync.error && !await askConfirm({
+        title: "Couldn't back up your latest changes",
+        text: `${sync.error}. If you log out now, changes since your last backup will be lost from this phone.`,
+        ok: 'Log out anyway', danger: true,
+      })) return;
       logOut();
       toast('Logged out');
       renderSettings();
@@ -3706,7 +3739,8 @@ function renderAccountCard() {
   card.innerHTML = `
     <h2>☁️ Account &amp; backup</h2>
     <p class="small">Log in to back up your sets online and use them on your other devices.</p>
-    <input class="field" id="email" type="email" autocomplete="email" autocapitalize="off" placeholder="Email address">
+    ${loadPref('pendingEmail', '') ? `<p class="small notice-ok">📧 Confirmed your email? Log in below with <b>${esc(loadPref('pendingEmail', ''))}</b> and your password.</p>` : ''}
+    <input class="field" id="email" type="email" autocomplete="email" autocapitalize="off" placeholder="Email address" value="${esc(loadPref('pendingEmail', ''))}">
     <p></p>
     <input class="field" id="password" type="password" autocomplete="current-password" placeholder="Password">
     <p></p>
@@ -3733,6 +3767,7 @@ function renderAccountCard() {
     busy(true);
     try {
       await logIn(c.email, c.password);
+      savePref('pendingEmail', '');
       authDone('Logged in — your sets are backed up');
     } catch (e) { toast(e.message); busy(false); }
   };
@@ -3750,9 +3785,11 @@ function renderAccountCard() {
         authDone('Account created — your sets are backed up');
       } else {
         busy(false);
+        savePref('pendingEmail', c.email);
         openSheet(`
           <h2>📧 Check your email</h2>
-          <p>We've sent a link to <b>${esc(c.email)}</b>. Tap it to confirm your account — it brings you back here, logged in.</p>
+          <p>We've sent a link to <b>${esc(c.email)}</b>. Tap it to confirm your account.</p>
+          <p><b>Then come back to Last Brick and log in</b> with this email and password. (On an iPhone the link may open in Safari, which is separate from the app on your home screen.)</p>
           <p class="muted small">Can't see it? Check your spam folder.</p>
           <button class="btn block" data-close>OK</button>`);
       }

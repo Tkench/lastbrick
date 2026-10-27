@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 const APP_DATE = '2026-10-27';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -34,7 +34,22 @@ const CF_ANALYTICS_TOKEN = 'd047238bacb6443ca8a2fce1abf3b394';
 
 let state = load();
 let ui = { setFilter: 'missing', missingColor: '', setSearch: '', missingView: loadPref('missingView2', 'list'), missingSort: loadPref('missingSort', 'colour'), missingType: '', setSort: loadPref('setSort', 'closest'), setView: loadPref('setView', 'grid'), setsShow: loadPref('setsShow', 'all'), collection: loadPref('collection', 'sets'), partView: loadPref('partView', 'grid'), partSort: loadPref('partSort', 'colour'), partColor: '', partType: '', partSetNum: '' };
+// Choices removed in 1.2.1 (compact views, year and part-number sorts) fall back to the nearest one left.
+if (!['grid', 'list'].includes(ui.setView)) ui.setView = 'list';
+if (!['grid', 'list'].includes(ui.partView)) ui.partView = 'list';
+if (!['grid', 'list'].includes(ui.missingView)) ui.missingView = 'list';
+if (ui.setSort === 'year') ui.setSort = 'closest';
+if (ui.partSort === 'partnum') ui.partSort = 'colour';
 let lastUndo = null;
+
+// Tips shown the first few times the app is opened, then never again.
+const tipsSeen = new Set();
+function showTip(id, times = 3) {
+  const key = 'tip.' + id;
+  let n = Number(loadPref(key, '0')) || 0;
+  if (!tipsSeen.has(id)) { tipsSeen.add(id); n += 1; savePref(key, String(n)); }
+  return n <= times;
+}
 let scanState = null; // { photoUrl, loading, error, items }
 let figAdd = {}; // the Add a minifigure page (scans and their results)
 
@@ -1309,16 +1324,14 @@ const SET_SORTS = [
   ['closest', 'Closest to finished'],
   ['newest', 'Newest added'],
   ['az', 'Name (A–Z)'],
-  ['year', 'Year (oldest first)'],
 ];
-const SET_VIEWS = [['grid', '▦', 'Grid'], ['list', '☰', 'List'], ['compact', '≡', 'Compact']];
+const SET_VIEWS = [['grid', '▦', 'Grid'], ['list', '☰', 'List']];
 
 function setsInOrder() {
   switch (ui.setSort) {
     case 'worth': return setsWorthFirst();
     case 'closest': return setsClosestFirst();
     case 'az': return sortedSets().sort((a, b) => a.name.localeCompare(b.name));
-    case 'year': return sortedSets().sort((a, b) => (a.year || 0) - (b.year || 0) || a.name.localeCompare(b.name));
     default: return sortedSets();
   }
 }
@@ -1367,7 +1380,7 @@ function renderSets() {
         <label class="sort-select">
           <span class="muted small">Sort</span>
           <select id="setSort" aria-label="Sort ${word[1]}">
-            ${SET_SORTS.map(([v, label]) => `<option value="${v}" ${ui.setSort === v ? 'selected' : ''}>${label}</option>`).join('')}
+            ${SET_SORTS.filter(([v]) => v !== 'worth' || all.some(hasValue)).map(([v, label]) => `<option value="${v}" ${ui.setSort === v ? 'selected' : ''}>${label}</option>`).join('')}
           </select>
         </label>
         <div class="view-toggle" role="group" aria-label="View">
@@ -1382,7 +1395,7 @@ function renderSets() {
     const valued = all.filter(hasValue);
     html += `<p class="muted small">${valued.length
       ? `Total value: <b>${money(valued.reduce((t, s) => t + s.value, 0))}</b> (${valued.length} of ${all.length} ${word[1]} valued)${ui.setSort === 'worth' ? '. Most value per missing piece first.' : ''}`
-      : `Tip: add a value to each ${word[0]} (open it and tap <b>Add value</b>) to see which are worth finishing first.`}</p>`;
+      : showTip('value') ? `Tip: add a value to each ${word[0]} (open it and tap <b>Add value</b>) to see which are worth finishing first.` : ''}</p>`;
     if (all.length > 4) html += searchBox('setSearch', ui.setSearch, `Search ${word[1]}…`);
 
     const q = ui.setSearch.toLowerCase();
@@ -1410,19 +1423,6 @@ function renderSets() {
             <div class="progress"><div style="width:${pct}%"></div></div>
             ${hasValue(s) || swaps ? `<div class="tile-meta">${hasValue(s) ? `<b class="value">${money(s.value)}</b>` : ''}${swaps ? `<span class="badge swap">🔁 ${swaps}</span>` : ''}</div>` : ''}
           </div>
-        </div>`;
-      }).join('')}</div>`;
-    } else if (ui.setView === 'compact') {
-      html += `<div class="card compact-list">${sets.map((s) => {
-        const { st, swaps } = info.get(s.setNum);
-        return `
-        <div class="compact-row" data-set="${esc(s.setNum)}">
-          ${setPic(s, 'compact-pic')}
-          <div class="grow">
-            <div class="compact-name">${esc(s.name)}</div>
-            <div class="muted small">${esc(setSub(s))}${hasValue(s) ? ` · ${money(s.value)}` : ''}${swaps ? ' · 🔁 ' + swaps : ''}</div>
-          </div>
-          ${st.missing ? `<span class="badge miss">${st.missing} missing</span>` : '<span class="badge ok">Complete ✓</span>'}
         </div>`;
       }).join('')}</div>`;
     } else {
@@ -2585,9 +2585,8 @@ const PART_SORTS = [
   ['colour', 'Colour'],
   ['type', 'Type of piece'],
   ['missing', 'Most missing first'],
-  ['partnum', 'Part number'],
 ];
-const PART_VIEWS = [['grid', '▦', 'Grid'], ['list', '☰', 'List'], ['check', '≡', 'Compact']];
+const PART_VIEWS = [['grid', '▦', 'Grid'], ['list', '☰', 'List']];
 // Enlarged view of one piece in a set, with − / + to record how many you've found.
 function showSetPartSheet(setNum, key, onChange) {
   const set = state.sets[setNum];
@@ -2624,7 +2623,6 @@ function showSetPartSheet(setNum, key, onChange) {
 const PART_VIEW_HINTS = {
   grid: 'Use − and + to record how many you\'ve found. Tap a picture to see it bigger.',
   list: 'Use − and + to record how many you\'ve found. Tap a picture to see it bigger.',
-  check: 'Use − and + to record how many you\'ve found. Tap a piece to see it bigger.',
 };
 
 // Groups pieces for the chosen sort: headings by colour or type, otherwise one list.
@@ -2664,24 +2662,6 @@ function renderPartItems(items) {
           <button data-act="plus" aria-label="One more">+</button>
           <span class="count">${p.have}<span class="of">/${p.qty}</span></span>
           <button data-act="minus" aria-label="One less">−</button>
-        </div>
-      </div>`;
-    }).join('')}</div>`;
-  }
-  if (ui.partView === 'check') {
-    return `<div class="part-list">${items.map((p) => {
-      const done = p.have >= p.qty;
-      return `
-      <div class="pitem crow ${done ? 'done' : 'missing'}" data-key="${esc(p.key)}">
-        <div class="crow-pic" data-act="view">${partImg(p)}</div>
-        <div class="grow" data-act="view">
-          <div class="crow-name">${esc(p.name)}</div>
-          <div class="meta">${swatch(p.rgb)} ${esc(p.colorName)} · ${esc(p.partNum)}${p.acc ? ' <span class="acc-tag">accessory</span>' : ''}</div>
-        </div>
-        <div class="mini-counter">
-          <button data-act="minus" aria-label="One less">−</button>
-          <span class="count ${done ? 'done' : ''}">${p.have}<span class="of">/${p.qty}</span></span>
-          <button data-act="plus" aria-label="One more">+</button>
         </div>
       </div>`;
     }).join('')}</div>`;
@@ -2793,7 +2773,7 @@ function renderSet(setNum) {
       <button data-f="all" class="${f === 'all' ? 'active' : ''}">All (${st.kinds})</button>
     </div>
     ${activeFilterTags(ui.partColor, ui.partColor ? set.parts.find((p) => p.colorName === ui.partColor).rgb : '', ui.partType, `Showing ${parts.length} of ${inFilter.length}:`)}
-    <p class="muted small">${PART_VIEW_HINTS[ui.partView]}</p>`;
+    ${showTip('counter') ? `<p class="muted small">${PART_VIEW_HINTS[ui.partView]}</p>` : ''}`;
 
   if (!parts.length) {
     html += f === 'missing' && !ui.partColor && !ui.partType
@@ -2813,10 +2793,9 @@ function renderSet(setNum) {
       <div class="row" style="flex-wrap:wrap">
         <button class="btn small" id="allHave">Tick all as have</button>
         <button class="btn small" id="allMissing">Untick all (start again)</button>
-        <button class="btn small" id="refresh">Re-download list</button>
-        <button class="btn small" id="del" style="color:var(--miss)">Delete ${noun(set)}</button>
       </div>
-    </div>`;
+    </div>
+    <p class="center small"><button class="link-btn muted" id="refresh">Parts list looks wrong? Download it again</button></p>`;
   $('#view').innerHTML = html;
 
   document.querySelectorAll('#filter button').forEach((b) => {
@@ -2894,7 +2873,7 @@ function renderSet(setNum) {
   if (!set.figs && !isFig(set)) loadSetFigs(set);
   const delBtn = $('#delBtn');
   delBtn.classList.remove('hidden');
-  $('#del').onclick = delBtn.onclick = async () => { if (await deleteSet(setNum)) go('#sets'); };
+  delBtn.onclick = async () => { if (await deleteSet(setNum)) go('#sets'); };
   $('#refresh').onclick = async () => {
     try {
       toast('Downloading…');
@@ -2980,7 +2959,7 @@ function figIcon() {
 }
 
 const MISSING_SORTS = [['colour', 'Colour'], ['type', 'Type'], ['needed', 'Most needed'], ['set', 'By set']];
-const MISSING_VIEWS = [['grid', '▦', 'Grid'], ['list', '☰', 'List'], ['compact', '≡', 'Compact']];
+const MISSING_VIEWS = [['grid', '▦', 'Grid'], ['list', '☰', 'List']];
 
 // Groups for Looking for. Each entry: { title, rgb, items: [{ g, sets }] } where
 // `sets` are the sets to show for that item (all of them, or one when grouped by set).
@@ -3095,17 +3074,6 @@ function renderMissingItems(items) {
         <div class="part missing" data-key="${esc(g.key)}" data-sheet>
           <div class="pic">${partImg(g.part)}<span class="need-tag">×${g.total}</span></div>
           <div class="info"><div class="meta">${swatch(g.part.rgb)} ${esc(g.part.colorName)}</div></div>
-        </div>`).join('')}</div>`;
-  }
-  if (ui.missingView === 'compact') {
-    return `<div class="part-list">${items.map(({ g, sets }) => `
-        <div class="crow missing" data-key="${esc(g.key)}" data-sheet>
-          <div class="crow-pic">${partImg(g.part)}</div>
-          <div class="grow">
-            <div class="crow-name">${esc(g.part.name)}</div>
-            <div class="meta">${swatch(g.part.rgb)} ${esc(g.part.colorName)} · ${esc(g.part.partNum)}</div>
-          </div>
-          <span class="badge miss">need ${sets.reduce((t, s) => t + s.need, 0)}</span>
         </div>`).join('')}</div>`;
   }
   return `<div class="part-list">${items.map(({ g, sets }) => `
@@ -3708,7 +3676,7 @@ function renderSettings() {
       <button class="btn primary block" id="saveKey">Save key</button>
     </div>`}
     <div class="card help-link">
-      <a class="btn block" href="#help">❓ Help &amp; FAQ</a>
+      <a class="btn block" href="#help">❓ Help, FAQ &amp; report a problem</a>
     </div>
     <details class="card advanced" id="backupCard">
       <summary>Backup file</summary>
@@ -3726,11 +3694,6 @@ function renderSettings() {
       <a class="btn primary block" href="${esc(TIP_URL)}" target="_blank" rel="noopener">☕ Buy me a coffee</a>
     </div>` : ''}
     <div id="statsCard"></div>
-    ${syncEnabled() ? `<div class="card">
-      <h2>⚑ Report a problem</h2>
-      <p class="muted small">Something not working, or a scan got it wrong? Let us know.</p>
-      <button class="btn block" id="reportGeneral">Report a problem</button>
-    </div>` : ''}
     <div class="card small muted">
       <h2 style="color:var(--text)">About</h2>
       <p>Parts lists and pictures: <a href="https://rebrickable.com" target="_blank" rel="noopener">Rebrickable</a>. Piece recognition: <a href="https://brickognize.com" target="_blank" rel="noopener">Brickognize</a>. LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.</p>
@@ -3749,12 +3712,6 @@ function renderSettings() {
     card.innerHTML = `<h2>📊 Stats</h2><p class="muted small">Visitors, sign-ups, popular sets and problem reports. Only you can see this.</p><button class="btn primary block" id="statsBtn">Open stats</button>`;
     $('#statsBtn').onclick = () => go('#stats');
   });
-  if ($('#reportGeneral')) {
-    $('#reportGeneral').onclick = () => showReportSheet({
-      kind: 'general', title: 'Report a problem', context: { page: 'Settings' },
-      intro: 'Tell us what happened and, if you can, what you were doing at the time.',
-    });
-  }
   $('#exportBtn').onclick = () => {
     const blob = new Blob([JSON.stringify({ app: 'lastbrick', version: 1, exportedAt: new Date().toISOString(), sets: state.sets }, null, 1)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -3939,7 +3896,7 @@ function renderHelp() {
       ${syncEnabled() ? '<button class="btn primary block" id="helpReport">Report a problem</button><p></p>' : ''}
       <a class="btn block" href="mailto:hello@lastbrick.co.uk">Email hello@lastbrick.co.uk</a>
     </div>`;
-  if ($('#helpReport')) $('#helpReport').onclick = () => showReportSheet({ kind: 'general', title: 'Report a problem', context: { page: 'Help' } });
+  if ($('#helpReport')) $('#helpReport').onclick = () => showReportSheet({ kind: 'general', title: 'Report a problem', context: { page: 'Help' }, intro: 'Tell us what happened and, if you can, what you were doing at the time.' });
 }
 
 /* ---------- Boot ---------- */

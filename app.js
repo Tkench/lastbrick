@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.4.1';
+const APP_VERSION = '1.5.0';
 const APP_DATE = '2026-10-28';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -1411,42 +1411,81 @@ function renderSets() {
 
     if (!sets.length) {
       html += `<div class="empty">${q ? `No ${word[1]} match your search.` : ui.setsShow === 'done' ? `No complete ${word[1]} yet.` : `No ${word[1]} in progress.`}</div>`;
-    } else if (ui.setView === 'grid') {
-      html += `<div class="set-grid">${sets.map((s) => {
-        const { st, pct, swaps } = info.get(s.setNum);
-        return `
-        <div class="set-tile ${s.plain ? 'plain' : ''}" data-set="${esc(s.setNum)}">
-          <div class="tile-pic">
-            ${setPic(s)}
-            ${s.plain ? '<span class="tile-tag pick">Which version?</span>' : st.missing ? `<span class="tile-tag miss">${st.missing} missing</span>` : '<span class="tile-tag ok">Complete ✓</span>'}
-          </div>
-          <div class="tile-body">
-            <div class="tile-name">${esc(s.name)}</div>
-            <div class="muted small">${esc(setSub(s))}</div>
-            <div class="progress"><div style="width:${pct}%"></div></div>
-            ${hasValue(s) || swaps ? `<div class="tile-meta">${hasValue(s) ? `<b class="value">${money(s.value)}</b>` : ''}${swaps ? `<span class="badge swap">🔁 ${swaps}</span>` : ''}</div>` : ''}
-          </div>
-        </div>`;
-      }).join('')}</div>`;
     } else {
-      for (const s of sets) {
-        const { st, pct, swaps } = info.get(s.setNum);
-        html += `
-        <div class="card set-card" data-set="${esc(s.setNum)}">
-          ${s.img ? `<img src="${esc(s.img)}" alt="" loading="lazy">` : ''}
-          <div class="grow">
-            <div class="name">${esc(s.name)}</div>
-            <div class="muted small">${esc(setSub(s))}${hasValue(s) ? ` · <b class="value">${money(s.value)}</b>` : ''}</div>
-            <div class="progress"><div style="width:${pct}%"></div></div>
-            <div class="small" style="margin-top:4px">
-              ${s.plain ? '<span class="badge pick">Which version?</span>' : st.missing
-                ? `<span class="badge miss">${st.missing} missing</span> <span class="muted">${st.have}/${st.need} pieces</span>`
-                : `<span class="badge ok">Complete ✓</span> <span class="muted">${st.need} pieces</span>`}
+      // Minifigures: one card per character; several versions share a card.
+      const entries = figs ? groupMyFigs(sets) : sets.map((x) => [x]);
+      ui.figGroups = entries;
+      const tag = (g, cls) => {
+        const missing = g.reduce((t, x) => t + (x.plain ? 0 : info.get(x.setNum).st.missing), 0);
+        return g.length === 1 && g[0].plain ? `<span class="${cls} pick">Which version?</span>`
+          : missing ? `<span class="${cls} miss">${missing} missing</span>` : `<span class="${cls} ok">Complete ✓</span>`;
+      };
+      const groupPct = (g) => { const need = g.reduce((t, x) => t + info.get(x.setNum).st.need, 0); return need ? Math.round(g.reduce((t, x) => t + info.get(x.setNum).st.have, 0) / need * 100) : 100; };
+      const title = (x) => (figs && !x.plain ? charName(x.name) : x.name);
+      const sub = (x) => (figs && !x.plain ? `${versionLabel(x.name)}${(x.count || 1) > 1 ? ` · ×${x.count}` : ''}` : setSub(x));
+      const groupSub = (g) => `${plural(g.length, 'version', 'versions')} · ${g.filter((x) => !x.plain && !info.get(x.setNum).st.missing).length} complete`;
+      const copies = (g) => g.reduce((t, x) => t + (x.count || 1), 0);
+      if (ui.setView === 'grid') {
+        html += `<div class="set-grid">${entries.map((g, gi) => {
+          const x = g[0];
+          if (g.length > 1) {
+            return `
+            <div class="set-tile char-tile" data-group="${gi}">
+              <div class="tile-pic multi">${g.slice(0, 3).map((y) => setPic(y)).join('')}<span class="tile-count">×${copies(g)}</span>${tag(g, 'tile-tag')}</div>
+              <div class="tile-body">
+                <div class="tile-name">${esc(charName(x.name))}</div>
+                <div class="muted small">${groupSub(g)}</div>
+                <div class="progress"><div style="width:${groupPct(g)}%"></div></div>
+              </div>
+            </div>`;
+          }
+          const { pct, swaps } = info.get(x.setNum);
+          return `
+          <div class="set-tile ${x.plain ? 'plain' : ''}" data-set="${esc(x.setNum)}">
+            <div class="tile-pic">${setPic(x)}${tag(g, 'tile-tag')}</div>
+            <div class="tile-body">
+              <div class="tile-name">${esc(title(x))}</div>
+              <div class="muted small">${esc(sub(x))}</div>
+              <div class="progress"><div style="width:${pct}%"></div></div>
+              ${hasValue(x) || swaps ? `<div class="tile-meta">${hasValue(x) ? `<b class="value">${money(x.value)}</b>` : ''}${swaps ? `<span class="badge swap">🔁 ${swaps}</span>` : ''}</div>` : ''}
             </div>
-            ${swaps ? `<div class="small" style="margin-top:4px"><span class="badge swap">🔁 ${swaps} can be swapped in</span></div>` : ''}
-          </div>
-          <button class="icon-btn" data-del="${esc(s.setNum)}" aria-label="Delete ${esc(s.name)}">🗑</button>
-        </div>`;
+          </div>`;
+        }).join('')}</div>`;
+      } else {
+        entries.forEach((g, gi) => {
+          const x = g[0];
+          if (g.length > 1) {
+            html += `
+            <div class="card set-card char-row" data-group="${gi}">
+              <span class="row-stack">${g.slice(0, 3).map((y) => setPic(y)).join('')}</span>
+              <div class="grow">
+                <div class="name">${esc(charName(x.name))} <span class="muted small">×${copies(g)}</span></div>
+                <div class="muted small">${groupSub(g)}</div>
+                <div class="progress"><div style="width:${groupPct(g)}%"></div></div>
+                <div class="small" style="margin-top:4px">${tag(g, 'badge')}</div>
+              </div>
+              <span class="chev">›</span>
+            </div>`;
+            return;
+          }
+          const { st, pct, swaps } = info.get(x.setNum);
+          html += `
+          <div class="card set-card" data-set="${esc(x.setNum)}">
+            ${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : ''}
+            <div class="grow">
+              <div class="name">${esc(title(x))}</div>
+              <div class="muted small">${esc(sub(x))}${hasValue(x) ? ` · <b class="value">${money(x.value)}</b>` : ''}</div>
+              <div class="progress"><div style="width:${pct}%"></div></div>
+              <div class="small" style="margin-top:4px">
+                ${x.plain ? '<span class="badge pick">Which version?</span>' : st.missing
+                  ? `<span class="badge miss">${st.missing} missing</span> <span class="muted">${st.have}/${st.need} pieces</span>`
+                  : `<span class="badge ok">Complete ✓</span> <span class="muted">${st.need} pieces</span>`}
+              </div>
+              ${swaps ? `<div class="small" style="margin-top:4px"><span class="badge swap">🔁 ${swaps} can be swapped in</span></div>` : ''}
+            </div>
+            <button class="icon-btn" data-del="${esc(x.setNum)}" aria-label="Delete ${esc(x.name)}">🗑</button>
+          </div>`;
+        });
       }
     }
   }
@@ -1473,6 +1512,7 @@ function renderSets() {
     b.onclick = () => { ui.setsShow = b.dataset.filter; savePref('setsShow', b.dataset.filter); renderSets(); };
   });
   bindSearch('setSearch', (v) => { ui.setSearch = v; }, renderSets);
+  document.querySelectorAll('[data-group]').forEach((el) => { el.onclick = () => showCharSheet(ui.figGroups[Number(el.dataset.group)]); });
   document.querySelectorAll('[data-set]').forEach((el) => {
     el.onclick = (e) => {
       const del = e.target.closest('[data-del]');
@@ -2203,7 +2243,7 @@ const charName = (name) => String(name).split(/, | - | \(| \/ /)[0].trim() || St
 const charKey = (name) => charName(name).toLowerCase();
 // What makes this version different: the rest of its name ("Reddish Brown Legs").
 const versionLabel = (name) => {
-  const rest = String(name).slice(charName(name).length).replace(/^\s*(,|-|\/)\s*/, '').replace(/^\(|\)$/g, '').trim();
+  const rest = String(name).slice(charName(name).length).trim().replace(/^(,|-|\/)\s*/, '').replace(/[()]/g, '').replace(/\s+,/g, ',').trim();
   return rest || 'Standard version';
 };
 
@@ -2351,6 +2391,43 @@ async function chooseVersion(plainNum, figNum, btn) {
   location.replace('#set/' + encodeURIComponent(fig.setNum));
   render();
   toast(`It's ${fig.name.split(',')[0]}: ${versionLabel(fig.name)}`, true);
+}
+
+// Your minifigures grouped by character, in list order (a group sits where its first figure is).
+function groupMyFigs(list) {
+  const groups = new Map();
+  for (const f of list) {
+    const k = charKey(f.name);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(f);
+  }
+  return [...groups.values()];
+}
+
+// Tapping a character card: your versions of it, each opening its own page.
+function showCharSheet(g) {
+  if (!g || !g.length) return;
+  const name = charName(g[0].name);
+  const copies = g.reduce((t, x) => t + (x.count || 1), 0);
+  openSheet(`
+    <button class="sheet-x" data-close aria-label="Close">✕</button>
+    <h2>${esc(name)} <span class="muted small">×${copies}</span></h2>
+    <p class="muted small">Your versions of ${esc(name)}. Tap one to open it.</p>
+    <div class="vlist">${g.map((x) => {
+      const st = setStats(x);
+      const from = (x.inSets || [])[0];
+      return `
+      <button class="vrow" data-open="${esc(x.setNum)}">
+        <span class="p">${setPic(x)}</span>
+        <span class="grow"><b>${esc(x.plain ? 'Version not chosen yet' : versionLabel(x.name))}</b>
+          <small>${[(x.count || 1) > 1 ? '×' + x.count : '', from ? from.name : ''].filter(Boolean).map(esc).join(' · ')}</small>
+          ${x.plain ? '<span class="badge pick">Which version?</span>' : st.missing ? `<span class="badge miss">${st.missing} missing</span>` : '<span class="badge ok">Complete ✓</span>'}</span>
+        <span class="chev">›</span>
+      </button>`;
+    }).join('')}</div>
+    <button class="btn block" id="addAnotherChar">＋ Add another ${esc(name)}</button>`);
+  document.querySelectorAll('[data-open]').forEach((b) => { b.onclick = () => { closeSheet(); go('#set/' + encodeURIComponent(b.dataset.open)); }; });
+  $('#addAnotherChar').onclick = () => { closeSheet(); resetFigAdd(); go('#addfig'); };
 }
 
 const plainFigs = () => Object.values(state.sets).filter((s) => s.plain);

@@ -12,6 +12,9 @@
 //   figs.json      [[fig_num, name, image, [set_num, …]], …] every minifigure and the sets
 //                  it came in, so a whole-figure scan (which gives BrickLink's name) can be
 //                  matched to Rebrickable's names, and matches from your sets shown first
+//   sets.json      { set_num: [name, year, pieces, minifigures] } for every set with a
+//                  minifigure, so the app can say which set a version came in, and spot
+//                  figures sold on their own (a small set with just one figure)
 //   meta.json      when it was built and how big it is
 // Parts are spread over 256 files by a hash of the part number (see shardOf,
 // which app.js repeats), so a scan downloads only one small file.
@@ -90,13 +93,20 @@ await eachRow('inventories.csv.gz', (r) => {
 });
 for (const [fig, { id }] of latest) figInv.set(id, fig);
 
-// Which sets each minifigure came in.
+// Which sets each minifigure came in, and how many figures each set has.
 const figSets = new Map(); // fig_num -> Set(set_num)
+const setFigCount = new Map(); // set_num -> number of minifigures
 await eachRow('inventory_minifigs.csv.gz', (r) => {
   const set = setOfInv.get(r.inventory_id);
   if (!set || !figs.has(r.fig_num)) return;
   if (!figSets.has(r.fig_num)) figSets.set(r.fig_num, new Set());
   figSets.get(r.fig_num).add(set);
+  setFigCount.set(set, (setFigCount.get(set) || 0) + (Number(r.quantity) || 1));
+});
+// Names, years and sizes of those sets.
+const setInfo = {};
+await eachRow('sets.csv.gz', (r) => {
+  if (setFigCount.has(r.set_num)) setInfo[r.set_num] = [r.name, Number(r.year) || 0, Number(r.num_parts) || 0, setFigCount.get(r.set_num)];
 });
 
 // 2. Which pieces (in which colour) each of those inventories holds.
@@ -155,5 +165,6 @@ for (const byHips of Object.values(legs)) {
   }
 }
 fs.writeFileSync(path.join(OUT, 'legs.json'), JSON.stringify(legs));
-fs.writeFileSync(path.join(OUT, 'meta.json'), JSON.stringify({ built: new Date().toISOString(), figs: latest.size, parts: index.size, imageBase: IMG }));
+fs.writeFileSync(path.join(OUT, 'sets.json'), JSON.stringify(setInfo));
+fs.writeFileSync(path.join(OUT, 'meta.json'), JSON.stringify({ built: new Date().toISOString(), figs: latest.size, parts: index.size, sets: Object.keys(setInfo).length, imageBase: IMG }));
 console.log(`Done: ${latest.size} minifigures, ${index.size} different pieces.`);

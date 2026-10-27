@@ -22,8 +22,8 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.3.0';
-const APP_DATE = '2026-10-27';
+const APP_VERSION = '1.4.0';
+const APP_DATE = '2026-10-28';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
 // Cloudflare Web Analytics (cookie-free visitor stats). Paste the site's token here
@@ -434,7 +434,7 @@ function shortSetNum(setNum) {
 const isFig = (s) => s.kind === 'fig' || /^fig-/i.test(s.setNum);
 const noun = (s, n = 1) => (isFig(s) ? (n === 1 ? 'minifigure' : 'minifigures') : (n === 1 ? 'set' : 'sets'));
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-const setSub = (s) => `${(s.count || 1) > 1 ? `×${s.count} · ` : ''}#${shortSetNum(s.setNum)}${s.year ? ' · ' + s.year : ''}`;
+const setSub = (s) => s.plain ? `${plural(s.versions.length, 'possible version', 'possible versions')}` : `${(s.count || 1) > 1 ? `×${s.count} · ` : ''}#${shortSetNum(s.setNum)}${s.year ? ' · ' + s.year : ''}`;
 
 function setStats(set) {
   let need = 0, have = 0, kinds = 0, kindsMissing = 0;
@@ -1359,7 +1359,8 @@ function renderSets() {
       <button data-c="figs" class="${figs ? 'active' : ''}">${figIcon()} Minifigures <em>${figCount}</em></button>
     </div>
     <button class="btn primary block" id="addBtn">＋ Add a ${word[0]}</button><p></p>
-    ${figs ? renderFigHints() : ''}`;
+    ${figs ? renderFigHints() : ''}
+    ${figs && plainFigs().length ? `<div class="choose-bar"><span>🤔 <b>${plural(plainFigs().length, 'figure needs', 'figures need')}</b> ${plainFigs().length === 1 ? 'its' : 'their'} version chosen</span><button class="btn small" id="choosePlain">Choose</button></div>` : ''}`;
   if (!all.length) {
     html += figs
       ? `<div class="empty">${emptyFig()}<b>No minifigures yet</b><br>Tap <b>Add a minifigure</b> to scan a whole figure, or scan one of its pieces (like the legs) to work out which figure it's from.</div>`
@@ -1373,7 +1374,7 @@ function renderSets() {
         swaps: st.missing ? swapsFor(s, index).reduce((t, m) => t + m.qty, 0) : 0,
       }];
     }));
-    const done = all.filter((s) => !info.get(s.setNum).st.missing).length;
+    const done = all.filter((s) => !s.plain && !info.get(s.setNum).st.missing).length;
     if (ui.setsShow === 'done' && !done) ui.setsShow = 'all';
     if (ui.setsShow === 'todo' && done === all.length) ui.setsShow = 'all';
 
@@ -1414,10 +1415,10 @@ function renderSets() {
       html += `<div class="set-grid">${sets.map((s) => {
         const { st, pct, swaps } = info.get(s.setNum);
         return `
-        <div class="set-tile" data-set="${esc(s.setNum)}">
+        <div class="set-tile ${s.plain ? 'plain' : ''}" data-set="${esc(s.setNum)}">
           <div class="tile-pic">
             ${setPic(s)}
-            ${st.missing ? `<span class="tile-tag miss">${st.missing} missing</span>` : '<span class="tile-tag ok">Complete ✓</span>'}
+            ${s.plain ? '<span class="tile-tag pick">Which version?</span>' : st.missing ? `<span class="tile-tag miss">${st.missing} missing</span>` : '<span class="tile-tag ok">Complete ✓</span>'}
           </div>
           <div class="tile-body">
             <div class="tile-name">${esc(s.name)}</div>
@@ -1438,7 +1439,7 @@ function renderSets() {
             <div class="muted small">${esc(setSub(s))}${hasValue(s) ? ` · <b class="value">${money(s.value)}</b>` : ''}</div>
             <div class="progress"><div style="width:${pct}%"></div></div>
             <div class="small" style="margin-top:4px">
-              ${st.missing
+              ${s.plain ? '<span class="badge pick">Which version?</span>' : st.missing
                 ? `<span class="badge miss">${st.missing} missing</span> <span class="muted">${st.have}/${st.need} pieces</span>`
                 : `<span class="badge ok">Complete ✓</span> <span class="muted">${st.need} pieces</span>`}
             </div>
@@ -1454,6 +1455,7 @@ function renderSets() {
   }
   $('#view').innerHTML = html;
   // Minifigures can still be scanned without an account; the check happens when adding.
+  if ($('#choosePlain')) $('#choosePlain').onclick = () => showVersionPicker(plainFigs()[0].setNum);
   $('#addBtn').onclick = () => {
     if (figs) { resetFigAdd(); go('#addfig'); return; }
     if (accountGate(() => go('#add'))) go('#add');
@@ -1938,6 +1940,15 @@ function showSetFigSheet(set, i, onChange) {
 }
 
 function renderFigSets(fig) {
+  if (fig.plain) {
+    return `
+    <div class="card plain-card">
+      <h2>🤔 Which version is it?</h2>
+      <p class="muted small">There ${fig.versions.length === 1 ? 'is 1 version' : `are ${fig.versions.length} versions`} of ${esc(fig.name)}. ${fig.parts.length ? 'Below are the pieces they all share.' : 'Pick yours to see its pieces.'} Choose the exact one whenever you know it.</p>
+      <div class="plain-strip">${fig.versions.slice(0, 6).map((v) => `<span>${v.set_img_url ? `<img src="${esc(v.set_img_url)}" alt="" loading="lazy">` : emptyFig('vpic-art')}</span>`).join('')}</div>
+      <button class="btn primary block" id="chooseVersion">Choose the version</button>
+    </div>`;
+  }
   const list = fig.inSets || [];
   const n = list.length;
   const done = !setStats(fig).missing;
@@ -2127,6 +2138,7 @@ async function checkFigAccessories(fig) {
 
 function bindFigSets(fig) {
   if (!isFig(fig)) return;
+  if (fig.plain) { if ($('#chooseVersion')) $('#chooseVersion').onclick = () => showVersionPicker(fig.setNum); return; }
   checkFigAccessories(fig);
   const addAcc = $('#addAcc');
   if (addAcc) {
@@ -2182,6 +2194,157 @@ async function loadFigSets() {
   if (all) figSetMap = new Map(all.map((f) => [f[0], f[3] || []]));
   return figSetMap;
 }
+
+/* ---------- Characters and versions ----------
+ * Rebrickable lists every version of a character as its own figure ("Cad Bane,
+ * Reddish Brown Legs", "Cad Bane - Dark Brown Legs"…). Matches are grouped by
+ * character (the name before the first comma, dash, bracket or slash), and you
+ * pick the version, or save a plain character and pick the version later. */
+const charName = (name) => String(name).split(/, | - | \(| \/ /)[0].trim() || String(name);
+const charKey = (name) => charName(name).toLowerCase();
+// What makes this version different: the rest of its name ("Reddish Brown Legs").
+const versionLabel = (name) => {
+  const rest = String(name).slice(charName(name).length).replace(/^\s*(,|-|\/)\s*/, '').replace(/^\(|\)$/g, '').trim();
+  return rest || 'Standard version';
+};
+
+// Names, years, sizes and figure counts of sets with minifigures (sets.json in the
+// weekly lookup): { set_num: [name, year, pieces, figures] }. Null until published.
+let figSetInfo = null;
+async function loadFigSetInfo() {
+  if (!figSetInfo) figSetInfo = await figIndexFile('sets.json');
+  return figSetInfo;
+}
+// A set that is just one figure on its own (collectable, polybag, blister…).
+const isPackSet = (num) => { const i = figSetInfo && figSetInfo[num]; return !!i && i[3] === 1 && i[2] <= 40; };
+const setLabel = (num) => {
+  const i = figSetInfo && figSetInfo[num];
+  return i ? `<b>${esc(i[0])}</b> #${esc(shortSetNum(num))}${i[1] ? ' · ' + i[1] : ''}` : `set <b>#${esc(shortSetNum(num))}</b>`;
+};
+
+// Groups figures ({ set_num, name, set_img_url }) into characters, keeping order.
+function groupByCharacter(list) {
+  const groups = new Map();
+  for (const f of list) {
+    const k = charKey(f.name);
+    if (!groups.has(k)) groups.set(k, { key: k, name: charName(f.name), versions: [] });
+    groups.get(k).versions.push(f);
+  }
+  return [...groups.values()];
+}
+
+// One version, as a card: picture, what's different, which set it came in.
+function versionCard(v, i, attr) {
+  const sets = (figSetMap && figSetMap.get(v.set_num)) || [];
+  const mine = sets.find((n) => state.sets[n] && !isFig(state.sets[n]));
+  const link = collectionLink(v.set_num);
+  const pack = sets.find(isPackSet);
+  const shown = mine || sets.find((n) => !isPackSet(n)) || sets[0];
+  const others = sets.filter((n) => n !== shown && !isPackSet(n)).length;
+  const from = !sets.length ? ''
+    : pack && sets.length === 1 ? `Sold on its own (${setLabel(pack)}), with its accessories`
+    : `Came in ${setLabel(shown)}${others ? ` and ${plural(others, 'other set', 'other sets')}` : ''}${pack ? '. Also sold on its own' : ''}`;
+  return `
+    <div class="ver ${mine ? 'own' : ''}">
+      <button class="vpic" ${attr}="${i}" data-pic aria-label="See it bigger">${v.set_img_url ? `<img src="${esc(v.set_img_url)}" alt="" loading="lazy">` : emptyFig('vpic-art')}</button>
+      <div class="grow">
+        ${mine ? '<span class="owned">✓ From a set you have</span>' : link ? `<span class="owned soft">${esc(link.text)}</span>` : pack && sets.length === 1 ? '<span class="pack">ON ITS OWN · PACK</span>' : ''}
+        <b class="vname">${esc(versionLabel(v.name))}</b>
+        ${from ? `<div class="from">${from}</div>` : ''}
+        <button class="btn ${mine ? 'ok' : 'primary'} small" ${attr}="${i}">This one</button>
+      </div>
+    </div>`;
+}
+
+// Versions sorted: from a set you have, then linked to your collection, then the rest.
+function sortVersions(versions) {
+  const rank = (v) => { const l = collectionLink(v.set_num); return l ? (l.kind === 'set' ? 0 : 1) : 2; };
+  return versions.map((v, i) => ({ v, i })).sort((a, b) => rank(a.v) - rank(b.v) || a.i - b.i).map((x) => x.v);
+}
+
+// The pieces every version shares (smallest count of each), for a plain character.
+async function sharedPieces(versions) {
+  if (versions.length > 6) return [];
+  try {
+    const figs = await Promise.all(versions.map((v) => fetchFig(v.set_num)));
+    const base = figs[0].parts.filter((p) => !p.acc);
+    return base.filter((p) => figs.every((f) => f.parts.some((q) => q.key === p.key && !q.acc)))
+      .map((p) => ({ ...p, qty: Math.min(...figs.map((f) => f.parts.find((q) => q.key === p.key).qty)), have: 0, per: undefined }));
+  } catch { return []; }
+}
+
+// "Not sure which version": saves the character with the pieces all versions share.
+async function savePlainCharacter(group, btn) {
+  if (!accountGate(() => refreshFigOut())) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  const versions = group.versions.slice(0, 40);
+  const parts = await sharedPieces(versions);
+  const sc = figAdd.scanned;
+  const scanned = sc && !sc.legs && parts.find((p) => p.partNum === sc.partNum && p.colorId === sc.colorId);
+  if (scanned) scanned.have = 1;
+  const fig = {
+    setNum: 'fig-any-' + charKey(group.name).replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString(36),
+    kind: 'fig', plain: true, name: group.name,
+    img: (versions.find((v) => v.set_img_url) || {}).set_img_url || '',
+    versions: versions.map((v) => ({ set_num: v.set_num, name: v.name, set_img_url: v.set_img_url || '' })),
+    parts, addedAt: Date.now(),
+  };
+  state.sets[fig.setNum] = fig;
+  save();
+  ui.collection = 'figs'; savePref('collection', 'figs'); ui.setFilter = 'missing';
+  go('#set/' + encodeURIComponent(fig.setNum));
+  toast(`Saved ${group.name}. Pick the exact version whenever you know it.`);
+}
+
+// Choosing the version of a plain character: becomes that figure, ticks kept.
+async function showVersionPicker(plainNum) {
+  const plain = state.sets[plainNum];
+  if (!plain || !plain.plain) return;
+  openSheet(`<button class="sheet-x" data-close aria-label="Close">✕</button><div class="spinner"></div><p class="center muted">Loading versions…</p>`);
+  await Promise.all([loadFigSets(), loadFigSetInfo()]);
+  if ($('#sheet').classList.contains('hidden')) return;
+  const versions = sortVersions(plain.versions);
+  openSheet(`
+    <button class="sheet-x" data-close aria-label="Close">✕</button>
+    <h2>Which ${esc(plain.name)} is it?</h2>
+    <p class="muted small">Tap a picture to see it bigger. The pieces you've ticked carry over.</p>
+    <div class="vers">${versions.map((v, i) => versionCard(v, i, 'data-pick')).join('')}</div>
+    <p></p><button class="btn block" data-close>Not now</button>`);
+  document.querySelectorAll('[data-pick]').forEach((b) => {
+    const v = versions[Number(b.dataset.pick)];
+    b.onclick = () => (b.hasAttribute('data-pic') ? showFigPreview(v.set_num, v.set_img_url, { forPlain: plainNum }) : chooseVersion(plainNum, v.set_num, b));
+  });
+}
+
+async function chooseVersion(plainNum, figNum, btn) {
+  const plain = state.sets[plainNum];
+  if (!plain) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+  let fig;
+  try { fig = await fetchFig(figNum); } catch (e) { toast(e.message); if (btn) { btn.disabled = false; btn.textContent = 'This one'; } return; }
+  if (!state.sets[plainNum]) return;
+  const before = JSON.stringify(state.sets);
+  const ticked = new Map(plain.parts.map((p) => [p.key, p.have]));
+  const mine = state.sets[fig.setNum];
+  if (mine && isFig(mine)) {
+    setFigCount(mine, (mine.count || 1) + 1);
+    for (const p of mine.parts) if (ticked.has(p.key)) p.have = Math.min(p.qty, p.have + ticked.get(p.key));
+  } else {
+    for (const p of fig.parts) if (ticked.has(p.key)) p.have = Math.min(p.qty, ticked.get(p.key));
+    fig.addedAt = plain.addedAt || Date.now();
+    state.sets[fig.setNum] = fig;
+  }
+  delete state.sets[plainNum];
+  save();
+  lastUndo = () => { state.sets = JSON.parse(before); save(); render(); };
+  closeSheet();
+  ui.setFilter = 'missing';
+  location.replace('#set/' + encodeURIComponent(fig.setNum));
+  render();
+  toast(`It's ${fig.name.split(',')[0]}: ${versionLabel(fig.name)}`, true);
+}
+
+const plainFigs = () => Object.values(state.sets).filter((s) => s.plain);
 
 // { kind: 'set' | 'fig', text } if a figure comes from a set you have, or from
 // the same set as one of your other minifigures.
@@ -2306,6 +2469,19 @@ function renderFigOutInner() {
       </button>`).join('')}</div>`;
     h += `<button class="link-btn" data-back="${legs ? 'legcolours' : 'guesses'}">‹ ${legs ? 'Pick a different legs colour' : 'Pick a different piece'}</button>`;
   }
+  if (a.step === 'versions') {
+    const c = a.char;
+    a.versionList = sortVersions(c.versions);
+    h += `<h3 class="steps-title">${esc(c.name)}</h3><p class="muted small">Which one do you have? Tap a picture to see it bigger.</p>`;
+    h += `<div class="vers">${a.versionList.map((v, i) => versionCard(v, i, 'data-ver')).join('')}</div>`;
+    h += `
+      <div class="unsure">
+        <span class="vpic">${c.versions[0].set_img_url ? `<img src="${esc(c.versions[0].set_img_url)}" alt="">` : emptyFig('vpic-art')}</span>
+        <div><b>Not sure which?</b><small>Save it as plain <b>${esc(c.name)}</b>${c.versions.length <= 6 ? ' with the pieces all versions share' : ''}. You can pick the exact version later.</small>
+        <button class="btn small" id="savePlain">Save as ${esc(c.name)}</button></div>
+      </div>`;
+    h += `<button class="link-btn" data-back="results">‹ All matches</button>`;
+  }
   if (a.step === 'results') {
     const q = (a.filter || '').toLowerCase();
     // Figures linked to your collection first: from a set you have, then from the
@@ -2327,9 +2503,21 @@ function renderFigOutInner() {
       </div>`;
     }
     if (a.results.length > 12) h += `<input class="field" id="figFilter" type="search" placeholder="Narrow down by name, e.g. knight" value="${esc(a.filter || '')}" autocomplete="off">`;
-    if (nLinked) h += `<p class="coll-note small">✨ ${nLinked === 1 ? 'One of these is' : `${nLinked} of these are`} linked to your collection, shown first.</p>`;
-    h += list.length ? figTiles(list.slice(0, FIG_SHOW_MAX)) : `<div class="empty">No figures match “${esc(a.filter)}”.</div>`;
-    if (list.length > FIG_SHOW_MAX) h += `<p class="center muted small">Showing ${FIG_SHOW_MAX} of ${list.length}. Type above to narrow it down.</p>`;
+
+    const chars = groupByCharacter(list);
+    a.chars = chars;
+    h += chars.length ? chars.slice(0, FIG_SHOW_MAX).map((c, i) => {
+      const fromMine = c.versions.filter((v) => v.link && v.link.kind === 'set').length;
+      const linked = c.versions.find((v) => v.link);
+      return `
+      <button class="char ${i === 0 && linked ? 'best' : ''}" data-char="${i}">
+        <span class="stack">${c.versions.slice(0, 3).map((v) => `<span>${v.set_img_url ? `<img src="${esc(v.set_img_url)}" alt="" loading="lazy">` : emptyFig('vpic-art')}</span>`).join('')}</span>
+        <span class="grow"><b>${esc(c.name)}</b><small>${c.versions.length === 1 ? esc(versionLabel(c.versions[0].name)) : `${c.versions.length} versions`}</small>
+        ${fromMine ? `<span class="tag">✓ ${fromMine === 1 && c.versions.length > 1 ? '1 from a set you have' : 'From a set you have'}</span>` : linked ? `<span class="tag soft">${esc(linked.link.text)}</span>` : ''}</span>
+        <span class="chev">›</span>
+      </button>`;
+    }).join('') : `<div class="empty">No figures match “${esc(a.filter)}”.</div>`;
+    if (chars.length > FIG_SHOW_MAX) h += `<p class="center muted small">Showing ${FIG_SHOW_MAX} of ${chars.length} characters. Type above to narrow it down.</p>`;
     if (a.back) h += `<button class="link-btn" data-back="${esc(a.back)}">‹ ${a.back === 'colours' || a.back === 'hips' || a.back === 'legcolours' ? 'Pick a different colour' : 'Pick a different match'}</button>`;
   }
   return h;
@@ -2522,6 +2710,20 @@ function bindAddFig() {
     };
   }
   document.querySelectorAll('[data-fig]').forEach((el) => { el.onclick = () => showFigPreview(el.dataset.fig, el.querySelector('img')?.getAttribute('src') || ''); });
+  // A character: one version opens straight away; more show the versions to choose from.
+  document.querySelectorAll('[data-char]').forEach((b) => {
+    b.onclick = async () => {
+      const c = figAdd.chars[Number(b.dataset.char)];
+      if (c.versions.length === 1) return showFigPreview(c.versions[0].set_num, c.versions[0].set_img_url || '');
+      await loadFigSetInfo();
+      Object.assign(figAdd, { step: 'versions', char: c });
+      refreshFigOut({ scroll: true });
+    };
+  });
+  document.querySelectorAll('[data-ver]').forEach((b) => {
+    b.onclick = () => { const v = figAdd.versionList[Number(b.dataset.ver)]; showFigPreview(v.set_num, v.set_img_url || ''); };
+  });
+  if ($('#savePlain')) $('#savePlain').onclick = () => savePlainCharacter(figAdd.char, $('#savePlain'));
 }
 
 /* Legs: scanners call plain legs 970c00 in any colour, but Rebrickable numbers
@@ -2612,7 +2814,7 @@ async function pickColour(colourId) {
 }
 
 // Details of one figure before adding it: its pieces and the sets it came in.
-async function showFigPreview(figNum, picture = '') {
+async function showFigPreview(figNum, picture = '', { forPlain = '' } = {}) {
   openSheet(`<button class="sheet-x" data-close aria-label="Close">✕</button><div class="spinner"></div><p class="center muted">Loading minifigure…</p>`);
   let fig;
   try {
@@ -2648,14 +2850,16 @@ async function showFigPreview(figNum, picture = '') {
       <h3 class="steps-title">${fig.inSets.length ? `Comes in ${plural(fig.inSets.length, 'set', 'sets')}` : 'Not part of a set'}</h3>
       ${figSetRows(fig, 3, false)}
       <p></p>
-      ${owned
+      ${forPlain
+        ? `<button class="btn primary block" id="figChoose">This is the one</button><p></p><button class="btn block" id="figBackToVersions">‹ Back to versions</button>`
+        : owned
         ? `<p class="muted small center">You have ${owned.count || 1} already.</p>
            <button class="btn primary block" id="figAnother">＋ Add another</button>
            <p></p><button class="btn block" id="figOpen">Open in my minifigures</button>`
         : `<button class="btn primary block" id="figAddBtn">＋ Add to my minifigures</button>
            <p class="muted small center">${scanned ? 'The piece you scanned is ticked as found; the rest go on your Looking for list.' : 'Its pieces start as missing, so they show on your Looking for list.'}</p>`}
-      <button class="btn block" data-close>Close</button>
-      ${syncEnabled() && figAdd.photoUrl ? reportLink('id="reportFigPreview"', 'Not the right figure? Tell us') : ''}
+      ${forPlain ? '' : '<button class="btn block" data-close>Close</button>'}
+      ${syncEnabled() && figAdd.photoUrl && !forPlain ? reportLink('id="reportFigPreview"', 'Not the right figure? Tell us') : ''}
     </div>`);
   if ($('#reportFigPreview')) {
     $('#reportFigPreview').onclick = () => showReportSheet({
@@ -2665,6 +2869,8 @@ async function showFigPreview(figNum, picture = '') {
   }
   const open = () => { ui.collection = 'figs'; savePref('collection', 'figs'); ui.setFilter = 'missing'; go('#set/' + encodeURIComponent(fig.setNum)); };
   if ($('#figOpen')) $('#figOpen').onclick = open;
+  if ($('#figChoose')) $('#figChoose').onclick = () => chooseVersion(forPlain, figNum, $('#figChoose'));
+  if ($('#figBackToVersions')) $('#figBackToVersions').onclick = () => showVersionPicker(forPlain);
   if ($('#figAnother')) {
     $('#figAnother').onclick = () => {
       if (!accountGate(() => showFigPreview(figNum, picture))) return;
@@ -2863,7 +3069,7 @@ function renderSet(setNum) {
         <div class="muted small">${esc(setSub(set))} · ${st.kinds} different parts</div>
         <div class="progress"><div style="width:${st.need ? Math.round(st.have / st.need * 100) : 100}%"></div></div>
         <div style="margin-top:6px">
-          ${st.missing ? `<span class="badge miss">${st.missing} ${st.missing === 1 ? 'piece' : 'pieces'} missing</span>` : `<span class="badge ok">Complete ✓</span>`}
+          ${set.plain ? '<span class="badge pick">Version not chosen yet</span>' : st.missing ? `<span class="badge miss">${st.missing} ${st.missing === 1 ? 'piece' : 'pieces'} missing</span>` : `<span class="badge ok">Complete ✓</span>`}
           <span class="muted small">${st.have} / ${st.need}</span>
         </div>
         ${isFig(set) ? `
@@ -2893,7 +3099,9 @@ function renderSet(setNum) {
     ${showTip('counter') ? `<p class="muted small">${PART_VIEW_HINTS[ui.partView]}</p>` : ''}`;
 
   if (!parts.length) {
-    html += f === 'missing' && !ui.partColor && !ui.partType
+    html += set.plain && !set.parts.length
+      ? `<div class="empty">Choose the version above to see its pieces.</div>`
+      : f === 'missing' && !ui.partColor && !ui.partType
       ? `<div class="empty"><div class="big">🎉</div>Nothing missing — this ${noun(set)} is complete!</div>`
       : `<div class="empty">No pieces here.</div>`;
   } else {

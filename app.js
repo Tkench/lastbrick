@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.2.2';
+const APP_VERSION = '1.3.0';
 const APP_DATE = '2026-10-27';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -865,13 +865,15 @@ function changeHave(setNum, key, delta, { withUndo = false } = {}) {
 async function deleteSet(setNum) {
   const set = state.sets[setNum];
   if (!set) return false;
+  const moved = (set.movedFigs || []).length;
   const ok = await askConfirm({
     title: `Delete ${set.name} (#${shortSetNum(setNum)})?`,
-    text: `Its parts list and your ticks will be removed from this phone. You can add the ${noun(set)} again later, but you'd need to re-tick the pieces.`,
+    text: `Its parts list and your ticks will be removed from this phone. You can add the ${noun(set)} again later, but you'd need to re-tick the pieces.${moved ? ` The ${plural(moved, 'minifigure', 'minifigures')} you moved in will go back to your Minifigures.` : ''}`,
     ok: `Delete ${noun(set)}`,
     danger: true,
   });
   if (!ok || !state.sets[setNum]) return false;
+  for (const m of set.movedFigs || []) takeFigOut(set, m);
   delete state.sets[setNum];
   save();
   toast(`Deleted ${set.name}`);
@@ -1638,11 +1640,13 @@ function showFigIdeas(showHidden = false) {
     const who = names.length === 1 ? `<b>${esc(names[0])}</b> belongs` : `<b>${names.length} of your minifigures</b> belong`;
     return `
     <div class="card fig-hint ${g.owned ? 'owned' : ''} ${isHidden ? 'is-hidden' : ''}">
+      <div class="idea-open" data-idea-open="${all.indexOf(g)}" role="button" tabindex="0">
       <h2>${g.owned
         ? `${who} in ${esc(g.info.name)}`
         : `${esc(names.slice(0, -1).join(', '))} and ${esc(names[names.length - 1])} all come from ${esc(g.info.name)}`}</h2>
       <p class="muted small">${g.owned ? `You have this set (#${esc(shortSetNum(g.info.setNum))}). Moving ${names.length === 1 ? 'it' : 'them'} ticks the found pieces in the set.` : `#${esc(shortSetNum(g.info.setNum))}${g.info.year ? ' · ' + esc(g.info.year) : ''}. Add the set and move them in? It could be a good one to rebuild next.`}</p>
-      <div class="hint-figs">${g.figs.map((f) => `<div class="thumb" title="${esc(f.name)}">${setPic(f)}</div>`).join('')}${g.info.img ? `<span class="hint-arrow">→</span><div class="thumb"><img src="${esc(g.info.img)}" alt="" loading="lazy"></div>` : ''}</div>
+      <div class="hint-figs">${g.figs.map((f) => `<div class="thumb" title="${esc(f.name)}">${setPic(f)}</div>`).join('')}${g.info.img ? `<span class="hint-arrow">→</span><div class="thumb"><img src="${esc(g.info.img)}" alt="" loading="lazy"></div>` : ''}<span class="idea-more">See it bigger ›</span></div>
+      </div>
       <div class="row">
         <button class="btn ${g.owned ? 'ok' : 'primary'} small grow" data-idea-go="${all.indexOf(g)}">${g.owned ? (names.length === 1 ? 'Move it' : `Move all ${names.length}`) : 'Add set &amp; move them'}</button>
         <button class="btn small" ${isHidden ? 'data-idea-show' : 'data-idea-hide'}="${all.indexOf(g)}">${isHidden ? 'Show again' : 'Not now'}</button>
@@ -1672,6 +1676,9 @@ function showFigIdeas(showHidden = false) {
       renderSets(); showFigIdeas(true);
     };
   });
+  document.querySelectorAll('[data-idea-open]').forEach((b) => {
+    b.onclick = () => showIdeaDetail(all[Number(b.dataset.ideaOpen)], showHidden);
+  });
   document.querySelectorAll('[data-idea-go]').forEach((b) => {
     b.onclick = async () => {
       const g = all[Number(b.dataset.ideaGo)];
@@ -1681,6 +1688,49 @@ function showFigIdeas(showHidden = false) {
   });
 }
 
+// One idea, bigger: the set's picture, your figures from it, and (for a set you
+// don't have) its pieces, so you can judge whether you're likely to have them.
+const ideaSets = new Map(); // set number -> parts list, fetched once
+function showIdeaDetail(g, showHidden, showParts = false) {
+  const info = g.info;
+  const parts = ideaSets.get(info.setNum);
+  const kinds = parts ? parts.length : 0;
+  const pieces = parts ? parts.reduce((t, p) => t + p.qty, 0) : 0;
+  openSheet(`
+    <button class="sheet-x" data-close aria-label="Close">✕</button>
+    <button class="link-btn idea-back" id="ideaBack">‹ Back to ideas</button>
+    <div class="idea-hero">${info.img ? `<img src="${esc(info.img)}" alt="">` : `<span class="no-pic">🧱</span>`}</div>
+    <h2 class="center">${esc(info.name)}</h2>
+    <p class="muted center">#${esc(shortSetNum(info.setNum))}${info.year ? ' · ' + esc(info.year) : ''}${g.owned ? ' · <b style="color:var(--ok)">✓ In your sets</b>' : ''}</p>
+    <h3 class="steps-title">Your minifigures from this set</h3>
+    <div class="idea-figs">${g.figs.map((f) => `<div><span class="thumb">${setPic(f)}</span><small>${esc(f.name.split(',')[0])}</small></div>`).join('')}</div>
+    ${g.owned ? '' : `
+    <h3 class="steps-title">The set's pieces</h3>
+    <div id="ideaParts">${showParts && parts
+      ? `<p class="muted small">${plural(pieces, 'piece', 'pieces')} in ${plural(kinds, 'kind', 'kinds')}. Do you think you have most of these?</p>
+         <div class="idea-parts">${parts.map((p) => `<div class="idea-part" title="${esc(p.name)} (${esc(p.colorName)})">${partImg(p)}<em>×${p.qty}</em></div>`).join('')}</div>`
+      : '<button class="btn block" id="ideaSeeParts">See the pieces</button>'}</div>`}
+    <p></p>
+    <button class="btn ${g.owned ? 'ok' : 'primary'} block" id="ideaGo">${g.owned ? (g.figs.length === 1 ? 'Move it into this set' : `Move all ${g.figs.length} into this set`) : 'Add set &amp; move them'}</button>`);
+  $('#ideaBack').onclick = () => showFigIdeas(showHidden);
+  if ($('#ideaSeeParts')) {
+    $('#ideaSeeParts').onclick = async () => {
+      const b = $('#ideaSeeParts');
+      if (!ideaSets.has(info.setNum)) {
+        b.disabled = true; b.textContent = 'Loading pieces…';
+        try {
+          const set = await fetchSet(info.setNum);
+          ideaSets.set(info.setNum, set.parts.slice().sort((a, b2) => a.colorName.localeCompare(b2.colorName) || b2.qty - a.qty));
+        } catch (e) { toast(e.message); b.disabled = false; b.textContent = 'See the pieces'; return; }
+      }
+      showIdeaDetail(g, showHidden, true);
+    };
+  }
+  $('#ideaGo').onclick = async () => {
+    if (!await moveFigsToSet(g.figs, info, $('#ideaGo'))) showIdeaDetail(g, showHidden, showParts);
+  };
+}
+
 // Moves several figures into one set (adding the set first if needed), with one Undo.
 async function moveFigsToSet(figs, info, btn) {
   const owned = state.sets[info.setNum] && !isFig(state.sets[info.setNum]);
@@ -1688,7 +1738,7 @@ async function moveFigsToSet(figs, info, btn) {
   const names = figs.map((f) => f.name.split(',')[0]);
   if (!await askConfirm({
     title: owned ? `Move ${names.length === 1 ? names[0] : `${names.length} minifigures`} into ${info.name}?` : `Add ${info.name} and move ${names.length} minifigures into it?`,
-    text: `${owned ? '' : 'The whole set is added, with its other pieces starting as missing. '}Their found pieces are ticked in the set and they come off your Minifigures list. Any pieces the set doesn't need stay with the figures.`,
+    text: `${owned ? '' : 'The whole set is added, with its other pieces starting as missing. '}Their found pieces are ticked in the set and they come off your Minifigures list. You can move them back any time from the set's page.`,
     ok: owned ? 'Move' : 'Add set & move',
   })) return;
   if (btn) { btn.disabled = true; btn.textContent = owned ? 'Moving…' : 'Adding…'; }
@@ -1696,6 +1746,7 @@ async function moveFigsToSet(figs, info, btn) {
   try {
     if (!owned) {
       const set = await fetchSet(info.setNum);
+      set.addedForFigs = true;
       state.sets[set.setNum] = set;
     }
     let spares = 0;
@@ -1703,7 +1754,7 @@ async function moveFigsToSet(figs, info, btn) {
     save();
     buzz();
     lastUndo = () => { state.sets = JSON.parse(before); save(); render(); };
-    toast(`🔁 Moved ${names.length === 1 ? names[0] : `${names.length} minifigures`} into ${info.name}${spares ? ` (${plural(spares, 'spare piece stays', 'spare pieces stay')} in Minifigures)` : ''}`, true);
+    toast(`🔁 Moved ${names.length === 1 ? names[0] : `${names.length} minifigures`} into ${info.name}${spares ? ` (${plural(spares, 'extra piece', 'extra pieces')} kept with them)` : ''}`, true);
     go('#set/' + encodeURIComponent(info.setNum));
     return true;
   } catch (e) {
@@ -1923,6 +1974,10 @@ function renderFigSets(fig) {
 
 // Moves a figure's found pieces into a set. Pieces the set has already found
 // stay with the figure as spares; the figure is removed if nothing is left.
+// Moves one figure into a set. The whole figure always moves: its found pieces
+// are ticked in the set, and any the set doesn't need stay with the figure, kept
+// in set.movedFigs so it can be moved back to Minifigures at any time.
+// set.movedFigs: [{ fig: one figure with its found pieces, added: { key: pieces ticked in the set } }]
 async function moveFigToSet(fig, setNum, { ask = true, quiet = false } = {}) {
   const set = state.sets[setNum];
   if (!set || !state.sets[fig.setNum]) return;
@@ -1931,51 +1986,121 @@ async function moveFigToSet(fig, setNum, { ask = true, quiet = false } = {}) {
   const take = (p) => Math.min(p.have, perFig(fig, p));
   const room = (p) => { const t = set.parts.find((x) => x.key === p.key); return t ? Math.min(take(p), t.qty - t.have) : 0; };
   const found = fig.parts.reduce((t, p) => t + room(p), 0);
+  const extra = fig.parts.reduce((t, p) => t + take(p) - room(p), 0);
   const ok = !ask || await askConfirm({
     title: count > 1 ? `Move one of your ${count} ${fig.name} into ${set.name}?` : `Move ${fig.name} into ${set.name}?`,
-    text: count > 1
-      ? `${found ? `${plural(found, 'found piece', 'found pieces')} will be ticked in ${set.name} (#${shortSetNum(setNum)})` : 'No pieces are found for it yet'}, and you'll have ${count - 1} left in Minifigures.`
-      : found
-      ? `Its ${plural(found, 'found piece', 'found pieces')} will be ticked in ${set.name} (#${shortSetNum(setNum)}) and it will come off your Minifigures list.`
-      : `It has no pieces found yet, so it will just come off your Minifigures list (its pieces are already in ${set.name}'s list).`,
+    text: `${found ? `${plural(found, 'found piece', 'found pieces')} will be ticked in ${set.name}` : 'No pieces are found for it yet'}${extra ? ` (${plural(extra, 'extra piece', 'extra pieces')} the set doesn't need stay with the figure)` : ''}. ${count > 1 ? `You'll have ${count - 1} left in Minifigures.` : 'It comes off your Minifigures list.'} You can move it back any time from the set's page.`,
     ok: 'Move',
   });
   if (!ok || !state.sets[fig.setNum] || !state.sets[setNum]) return;
-  const before = { fig: structuredClone(fig), set: set.parts.map((p) => p.have) };
-  const spares = [];
+  const before = JSON.stringify(state.sets);
+  const one = structuredClone(fig);
+  one.count = 1;
+  delete one.addedAt;
+  const added = {};
   for (const p of fig.parts) {
     const t = take(p);
+    const q = one.parts.find((x) => x.key === p.key);
+    q.per = perFig(fig, p); q.qty = q.per; q.have = t;
     if (!t) continue;
     const target = set.parts.find((x) => x.key === p.key);
     const moved = target ? Math.min(t, target.qty - target.have) : 0;
-    if (target) target.have += moved;
-    p.have -= moved;
-    if (t - moved) spares.push({ p, n: t - moved, why: target ? 'found' : 'notneeded' });
+    if (moved) { target.have += moved; added[p.key] = moved; }
+    p.have -= t;
   }
-  if (count > 1) {
-    // One fewer figure, unless pieces that couldn't move need its space as spares.
-    if (fig.parts.every((p) => p.have <= perFig(fig, p) * (count - 1))) setFigCount(fig, count - 1);
-  } else if (!spares.length) delete state.sets[fig.setNum];
-  if (quiet) return spares.reduce((t, x) => t + x.n, 0);
+  (set.movedFigs = set.movedFigs || []).push({ fig: one, added, at: Date.now() });
+  if (count > 1) setFigCount(fig, count - 1);
+  else delete state.sets[fig.setNum];
+  if (quiet) return extra;
   save();
   buzz();
-  lastUndo = () => {
-    state.sets[fig.setNum] = before.fig;
-    set.parts.forEach((p, i) => { p.have = before.set[i]; });
-    save();
-    render();
-  };
-  if (spares.length || count > 1) {
-    const n = spares.reduce((t, x) => t + x.n, 0);
-    if (!n) { toast(`🔁 Moved one ${fig.name} into ${set.name}`, true); render(); return; }
-    const names = spares.map((x) => x.p.name).slice(0, 2).join(', ');
-    const why = spares.every((x) => x.why === 'notneeded') ? "isn't in that set" : spares.every((x) => x.why === 'found') ? 'was already found there' : "wasn't needed there";
-    toast(`Moved to ${set.name}. ${n === 1 ? `1 piece (${names}) ${why}` : `${n} pieces (${names}${spares.length > 2 ? '…' : ''}) ${why.replace('was', 'were').replace("isn't", "aren't").replace("wasn't", "weren't")}`}, so ${n === 1 ? 'it stays' : 'they stay'} with your figure.`, true);
-    render();
-  } else {
-    toast(`🔁 Moved ${fig.name} into ${set.name}`, true);
-    location.replace('#set/' + encodeURIComponent(setNum));
+  lastUndo = () => { state.sets = JSON.parse(before); save(); render(); };
+  toast(`🔁 Moved ${fig.name.split(',')[0]} into ${set.name}${extra ? ` (${plural(extra, 'extra piece', 'extra pieces')} kept with it)` : ''}`, true);
+  if (count > 1) render();
+  else location.replace('#set/' + encodeURIComponent(setNum));
+}
+
+// Takes a moved figure back out of a set: unticks the pieces it brought (as far
+// as they're still ticked) and puts it back in Minifigures with its pieces.
+function takeFigOut(set, m) {
+  const one = structuredClone(m.fig);
+  for (const q of one.parts) {
+    const lent = m.added[q.key] || 0;
+    if (!lent) continue;
+    const t = set.parts.find((x) => x.key === q.key);
+    const back = t ? Math.min(lent, t.have) : 0;
+    if (t) t.have -= back;
+    q.have = Math.max(0, q.have - lent + back);
   }
+  const have = state.sets[one.setNum];
+  if (have && isFig(have)) {
+    const n = (have.count || 1) + 1;
+    for (const q of one.parts) {
+      if (!have.parts.some((x) => x.key === q.key)) have.parts.push({ ...q, per: q.per, qty: q.per * (have.count || 1), have: 0 });
+    }
+    setFigCount(have, n);
+    for (const q of one.parts) { const x = have.parts.find((y) => y.key === q.key); x.have = Math.min(x.qty, x.have + q.have); }
+  } else {
+    one.addedAt = Date.now();
+    state.sets[one.setNum] = one;
+  }
+}
+
+async function moveFigsBack(setNum, which) {
+  const set = state.sets[setNum];
+  const list = set?.movedFigs || [];
+  const picked = which == null ? list : [list[which]].filter(Boolean);
+  if (!picked.length) return;
+  const name = picked.length === 1 ? picked[0].fig.name.split(',')[0] : `${picked.length} minifigures`;
+  if (!await askConfirm({
+    title: `Move ${name} back to Minifigures?`,
+    text: `The pieces ${picked.length === 1 ? 'it' : 'they'} brought are unticked in ${set.name} and go back with ${picked.length === 1 ? 'the figure' : 'the figures'}.`,
+    ok: 'Move back',
+  })) return;
+  if (!state.sets[setNum]) return;
+  const before = JSON.stringify(state.sets);
+  for (const m of picked) takeFigOut(set, m);
+  set.movedFigs = list.filter((m) => !picked.includes(m));
+  if (!set.movedFigs.length) delete set.movedFigs;
+  save();
+  lastUndo = () => { state.sets = JSON.parse(before); save(); render(); };
+  toast(`🔁 Moved ${name} back to Minifigures`, true);
+  // A set added just to hold these figures, now with nothing ticked: offer to remove it.
+  if (set.addedForFigs && !set.movedFigs && set.parts.every((p) => !p.have)) {
+    if (await askConfirm({
+      title: `Remove ${set.name} too?`,
+      text: 'It was added to hold these minifigures and has no pieces ticked now.',
+      ok: 'Remove set',
+    })) {
+      delete state.sets[setNum];
+      save();
+      go('#sets');
+      return;
+    }
+  }
+  render();
+}
+
+// On a set's page: the figures you moved in from Minifigures, each with Move back.
+function renderMovedFigs(set) {
+  const list = set.movedFigs || [];
+  if (!list.length) return '';
+  return `
+    <div class="card moved-figs">
+      <h2>${figIcon()} From your Minifigures</h2>
+      <p class="muted small">You moved ${list.length === 1 ? 'this' : 'these'} in. Don't have this set's pieces after all? Move ${list.length === 1 ? 'it' : 'them'} back.</p>
+      ${list.map((m, i) => {
+        const ticked = Object.values(m.added).reduce((t, n) => t + n, 0);
+        const extra = m.fig.parts.reduce((t, q) => t + q.have, 0) - ticked;
+        return `
+        <div class="moved-row">
+          <span class="thumb">${setPic(m.fig)}</span>
+          <span class="grow"><b>${esc(m.fig.name.split(',')[0])}</b><small>${plural(ticked, 'piece', 'pieces')} ticked here${extra > 0 ? ` · ${plural(extra, 'extra piece', 'extra pieces')} kept with it` : ''}</small></span>
+          <button class="btn small" data-move-back="${i}">Move back</button>
+        </div>`;
+      }).join('')}
+      ${list.length > 1 ? '<button class="link-btn" id="moveAllBack">Move all back</button>' : ''}
+    </div>`;
 }
 
 // Figures added before accessories existed: look once for their packet's accessories.
@@ -2035,6 +2160,7 @@ function bindFigSets(fig) {
       try {
         if (!state.sets[num]) {
           const set = await fetchSet(num);
+          set.addedForFigs = true;
           state.sets[set.setNum] = set;
           save();
         }
@@ -2753,7 +2879,7 @@ function renderSet(setNum) {
         <button class="btn small value-btn" id="valueBtn">${hasValue(set) ? `💷 ${money(set.value)} · edit` : '💷 Add value'}</button>
       </div>
     </div>
-    ${isFig(set) ? renderFigSets(set) : renderSetFigs(set)}
+    ${isFig(set) ? renderFigSets(set) : renderSetFigs(set) + renderMovedFigs(set)}
     ${renderSwapBox(set)}
     <div class="set-controls">
       <div class="seg" id="filter">
@@ -2858,6 +2984,8 @@ function renderSet(setNum) {
   }
   document.querySelectorAll('[data-setfig]').forEach((b) => { b.onclick = () => showSetFigSheet(set, Number(b.dataset.setfig), rerender); });
   if ($('#toFig')) $('#toFig').onclick = () => turnIntoFig(set);
+  document.querySelectorAll('[data-move-back]').forEach((b) => { b.onclick = () => moveFigsBack(setNum, Number(b.dataset.moveBack)); });
+  if ($('#moveAllBack')) $('#moveAllBack').onclick = () => moveFigsBack(setNum);
   if ($('#looseIn')) {
     $('#looseIn').onclick = () => moveFigsToSet(set.figs.map((f) => state.sets[f.figNum]).filter((f) => f && isFig(f)),
       { setNum: set.setNum, name: set.name, year: set.year, img: set.img }, $('#looseIn'));

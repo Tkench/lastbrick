@@ -744,3 +744,29 @@ body.welcome .topbar {
 .sf-btn { width: 48px; height: auto; min-height: 44px; padding: 0; justify-content: center; position: relative; }
 .sf-btn svg { width: 22px; height: 22px; }
 .sf-btn .fcount { position: absolute; top: -6px; right: -6px; }
+
+/* Figures moved into a set, with Move back */
+.moved-figs h2 { display: flex; align-items: center; gap: 8px; }
+.moved-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.moved-row .thumb { width: 48px; height: 48px; flex: none; }
+.moved-row .thumb img { width: 90%; height: 90%; object-fit: contain; }
+.moved-row small { display: block; color: var(--muted); font-size: 13px; }
+.moved-figs .link-btn { margin-top: 6px; }
+
+/* Ideas: tap one to see it bigger */
+.idea-open { cursor: pointer; }
+.idea-more { margin-left: auto; font-size: 14px; font-weight: 700; color: var(--brand); white-space: nowrap; }
+.idea-back { display: block; margin: 4px 0 8px; font-weight: 700; }
+.idea-hero { background: #fff; border-radius: 14px; display: flex; justify-content: center; padding: 12px; margin-bottom: 10px; }
+.idea-hero img { width: 80%; max-width: 320px; aspect-ratio: 4/3; object-fit: contain; }
+.idea-hero .no-pic { font-size: 64px; }
+.idea-figs { display: flex; flex-wrap: wrap; gap: 12px; }
+.idea-figs > div { width: 84px; text-align: center; }
+.idea-figs .thumb { width: 84px; height: 84px; }
+.idea-figs .thumb img { width: 90%; height: 90%; object-fit: contain; }
+.idea-figs small { display: block; font-size: 12px; line-height: 1.25; margin-top: 4px; }
+.idea-parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; max-height: 50vh; overflow: auto; padding: 2px; }
+.idea-part { position: relative; background: #fff; border-radius: 10px; aspect-ratio: 1; display: grid; place-items: center; border: 1px solid var(--line); }
+.idea-part img { width: 80%; height: 80%; object-fit: contain; }
+.idea-part .noimg { font-size: 10px; color: #888; text-align: center; }
+.idea-part em { position: absolute; right: 3px; bottom: 2px; font-style: normal; font-size: 11px; font-weight: 800; color: #1b1b1f; background: rgba(255,255,255,.85); border-radius: 6px; padding: 0 3px; }

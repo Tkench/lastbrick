@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.2.2';
 const APP_DATE = '2026-10-27';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -1387,11 +1387,11 @@ function renderSets() {
           ${SET_VIEWS.map(([v, icon, label]) => `<button data-view="${v}" class="${ui.setView === v ? 'active' : ''}" aria-label="${label} view" title="${label}">${icon}</button>`).join('')}
         </div>
       </div>
-      <div class="chips">
+      ${done || ui.setsShow !== 'all' ? `<div class="chips">
         <button class="chip ${ui.setsShow === 'all' ? 'active' : ''}" data-filter="all">All (${all.length})</button>
         <button class="chip ${ui.setsShow === 'todo' ? 'active' : ''}" data-filter="todo">In progress (${all.length - done})</button>
         <button class="chip ${ui.setsShow === 'done' ? 'active' : ''}" data-filter="done">Complete (${done})</button>
-      </div>`;
+      </div>` : ''}`;
     const valued = all.filter(hasValue);
     html += `<p class="muted small">${valued.length
       ? `Total value: <b>${money(valued.reduce((t, s) => t + s.value, 0))}</b> (${valued.length} of ${all.length} ${word[1]} valued)${ui.setSort === 'worth' ? '. Most value per missing piece first.' : ''}`
@@ -2755,22 +2755,13 @@ function renderSet(setNum) {
     </div>
     ${isFig(set) ? renderFigSets(set) : renderSetFigs(set)}
     ${renderSwapBox(set)}
-    <div class="sets-toolbar lf-toolbar">
-      <label class="sort-select">
-        <span class="muted small">Sort</span>
-        <select id="partSort" aria-label="Sort pieces">
-          ${PART_SORTS.map(([v, label]) => `<option value="${v}" ${ui.partSort === v ? 'selected' : ''}>${label}</option>`).join('')}
-        </select>
-      </label>
-      ${filterButton(ui.partColor, ui.partType)}
-      <div class="view-toggle" role="group" aria-label="View">
-        ${PART_VIEWS.map(([v, icon, label]) => `<button data-pview="${v}" class="${ui.partView === v ? 'active' : ''}" aria-label="${label} view" title="${label}">${icon}</button>`).join('')}
+    <div class="set-controls">
+      <div class="seg" id="filter">
+        <button data-f="missing" class="${f === 'missing' ? 'active' : ''}">Missing (${st.kindsMissing})</button>
+        <button data-f="have" class="${f === 'have' ? 'active' : ''}">Have (${st.kinds - st.kindsMissing})</button>
+        <button data-f="all" class="${f === 'all' ? 'active' : ''}">All (${st.kinds})</button>
       </div>
-    </div>
-    <div class="seg" id="filter">
-      <button data-f="missing" class="${f === 'missing' ? 'active' : ''}">Missing (${st.kindsMissing})</button>
-      <button data-f="have" class="${f === 'have' ? 'active' : ''}">Have (${st.kinds - st.kindsMissing})</button>
-      <button data-f="all" class="${f === 'all' ? 'active' : ''}">All (${st.kinds})</button>
+      ${sortFilterButton((ui.partColor ? 1 : 0) + (ui.partType ? 1 : 0))}
     </div>
     ${activeFilterTags(ui.partColor, ui.partColor ? set.parts.find((p) => p.colorName === ui.partColor).rgb : '', ui.partType, `Showing ${parts.length} of ${inFilter.length}:`)}
     ${showTip('counter') ? `<p class="muted small">${PART_VIEW_HINTS[ui.partView]}</p>` : ''}`;
@@ -2802,16 +2793,17 @@ function renderSet(setNum) {
     b.onclick = () => { ui.setFilter = b.dataset.f; renderSet(setNum); };
   });
   const rerender = () => { const y = window.scrollY; renderSet(setNum); window.scrollTo(0, y); };
-  const sortSel = $('#partSort');
-  sortSel.onchange = () => { ui.partSort = sortSel.value; savePref('partSort', sortSel.value); rerender(); };
-  document.querySelectorAll('[data-pview]').forEach((b) => {
-    b.onclick = () => { ui.partView = b.dataset.pview; savePref('partView', b.dataset.pview); rerender(); };
-  });
   $('#filterBtn').onclick = () => showFilterSheet(
     inFilter.map((p) => ({ colour: p.colorName, rgb: p.rgb, type: pieceType(p), n: 1 })),
     { colour: ui.partColor, type: ui.partType },
-    ({ colour, type }) => { ui.partColor = colour; ui.partType = type; rerender(); },
-    ['different piece', 'different pieces']);
+    ({ colour, type, sort, view }) => {
+      ui.partColor = colour; ui.partType = type;
+      ui.partSort = sort; savePref('partSort', sort);
+      ui.partView = view; savePref('partView', view);
+      rerender();
+    },
+    ['different piece', 'different pieces'],
+    { sorts: PART_SORTS, sort: ui.partSort, views: PART_VIEWS, view: ui.partView });
   document.querySelectorAll('[data-clear]').forEach((b) => {
     b.onclick = () => { if (b.dataset.clear === 'colour') ui.partColor = ''; else ui.partType = ''; rerender(); };
   });
@@ -3093,8 +3085,10 @@ function renderMissingItems(items) {
 
 // Bottom panel with every colour and type laid out in a grid (no sideways
 // scrolling). `entries` are { colour, rgb, type, n }; counts respect the other choice.
-function showFilterSheet(entries, current, onApply, unit = ['piece', 'pieces']) {
+// extra (optional): { sorts, sort, views, view } adds "Sort by" and "Show as" at the top.
+function showFilterSheet(entries, current, onApply, unit = ['piece', 'pieces'], extra = null) {
   let colour = current.colour, type = current.type;
+  let sort = extra?.sort, view = extra?.view;
   const draw = () => {
     const colours = new Map(), types = new Map();
     let count = 0;
@@ -3108,7 +3102,12 @@ function showFilterSheet(entries, current, onApply, unit = ['piece', 'pieces']) 
     }
     openSheet(`
       <div class="filter-sheet">
-        <div class="row"><h2 class="grow">Filter</h2><button class="link-btn" id="fClear">Clear all</button></div>
+        <div class="row"><h2 class="grow">${extra ? 'Sort &amp; filter' : 'Filter'}</h2><button class="link-btn" id="fClear">Clear ${extra ? 'filters' : 'all'}</button></div>
+        ${extra ? `
+        <h3 class="steps-title">Sort by</h3>
+        <div class="filter-grid">${extra.sorts.map(([v, label]) => `<button class="fchip ${sort === v ? 'on' : ''}" data-fs="${v}"><span>${esc(label)}</span></button>`).join('')}</div>
+        <h3 class="steps-title">Show as</h3>
+        <div class="filter-grid">${extra.views.map(([v, icon, label]) => `<button class="fchip ${view === v ? 'on' : ''}" data-fv="${v}"><span>${icon} ${esc(label)}</span></button>`).join('')}</div>` : ''}
         <h3 class="steps-title">Colour</h3>
         <div class="filter-grid">
           ${[...colours.values()].sort((a, b) => b.n - a.n).map((c) => `
@@ -3123,8 +3122,10 @@ function showFilterSheet(entries, current, onApply, unit = ['piece', 'pieces']) 
       </div>`);
     document.querySelectorAll('[data-fc]').forEach((b) => { b.onclick = () => { colour = colour === b.dataset.fc ? '' : b.dataset.fc; draw(); }; });
     document.querySelectorAll('[data-ft]').forEach((b) => { b.onclick = () => { type = type === b.dataset.ft ? '' : b.dataset.ft; draw(); }; });
+    document.querySelectorAll('[data-fs]').forEach((b) => { b.onclick = () => { sort = b.dataset.fs; draw(); }; });
+    document.querySelectorAll('[data-fv]').forEach((b) => { b.onclick = () => { view = b.dataset.fv; draw(); }; });
     $('#fClear').onclick = () => { colour = ''; type = ''; draw(); };
-    $('#fApply').onclick = () => { closeSheet(); onApply({ colour, type }); };
+    $('#fApply').onclick = () => { closeSheet(); onApply({ colour, type, sort, view }); };
   };
   draw();
 }
@@ -3134,6 +3135,14 @@ function filterButton(colour, type) {
   return `<button class="filter-btn ${n ? 'on' : ''}" id="filterBtn">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18l-7 8v5l-4 2v-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
         <span class="fword">Filter</span>${n ? `<span class="fcount">${n}</span>` : ''}
+      </button>`;
+}
+
+// Square "Sort & filter" button for a set page, with a count of filters in use.
+function sortFilterButton(n) {
+  return `<button class="filter-btn sf-btn ${n ? 'on' : ''}" id="filterBtn" aria-label="Sort and filter" title="Sort &amp; filter">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        ${n ? `<span class="fcount">${n}</span>` : ''}
       </button>`;
 }
 

@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.4.1';
 const APP_DATE = '2026-10-28';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -1983,8 +1983,6 @@ function renderFigSets(fig) {
     </div>`;
 }
 
-// Moves a figure's found pieces into a set. Pieces the set has already found
-// stay with the figure as spares; the figure is removed if nothing is left.
 // Moves one figure into a set. The whole figure always moves: its found pieces
 // are ticked in the set, and any the set doesn't need stay with the figure, kept
 // in set.movedFigs so it can be moved back to Minifigures at any time.
@@ -2139,6 +2137,7 @@ async function checkFigAccessories(fig) {
 function bindFigSets(fig) {
   if (!isFig(fig)) return;
   if (fig.plain) { if ($('#chooseVersion')) $('#chooseVersion').onclick = () => showVersionPicker(fig.setNum); return; }
+  if ($('#changeVersion')) $('#changeVersion').onclick = () => showVersionPicker(fig.setNum);
   checkFigAccessories(fig);
   const addAcc = $('#addAcc');
   if (addAcc) {
@@ -2248,7 +2247,7 @@ function versionCard(v, i, attr) {
     <div class="ver ${mine ? 'own' : ''}">
       <button class="vpic" ${attr}="${i}" data-pic aria-label="See it bigger">${v.set_img_url ? `<img src="${esc(v.set_img_url)}" alt="" loading="lazy">` : emptyFig('vpic-art')}</button>
       <div class="grow">
-        ${mine ? '<span class="owned">✓ From a set you have</span>' : link ? `<span class="owned soft">${esc(link.text)}</span>` : pack && sets.length === 1 ? '<span class="pack">ON ITS OWN · PACK</span>' : ''}
+        ${mine ? '<span class="owned">✓ From a set you have</span>' : state.sets[v.set_num] ? '<span class="owned soft">Already in your minifigures</span>' : link ? `<span class="owned soft">${esc(link.text)}</span>` : pack && sets.length === 1 ? '<span class="pack">ON ITS OWN · PACK</span>' : ''}
         <b class="vname">${esc(versionLabel(v.name))}</b>
         ${from ? `<div class="from">${from}</div>` : ''}
         <button class="btn ${mine ? 'ok' : 'primary'} small" ${attr}="${i}">This one</button>
@@ -2297,19 +2296,26 @@ async function savePlainCharacter(group, btn) {
 }
 
 // Choosing the version of a plain character: becomes that figure, ticks kept.
+// Also used by "Wrong version? Change it" on a figure's page: the other versions
+// of the same character, from the weekly lookup.
 async function showVersionPicker(plainNum) {
   const plain = state.sets[plainNum];
-  if (!plain || !plain.plain) return;
+  if (!plain || !isFig(plain)) return;
   openSheet(`<button class="sheet-x" data-close aria-label="Close">✕</button><div class="spinner"></div><p class="center muted">Loading versions…</p>`);
-  await Promise.all([loadFigSets(), loadFigSetInfo()]);
+  const [, , all] = await Promise.all([loadFigSets(), loadFigSetInfo(), plain.plain ? null : figIndexFile('figs.json')]);
   if ($('#sheet').classList.contains('hidden')) return;
-  const versions = sortVersions(plain.versions);
+  const others = plain.plain ? plain.versions
+    : (all || []).filter((f) => f[0] !== plain.setNum && charKey(f[1]) === charKey(plain.name)).slice(0, 60)
+      .map((f) => ({ set_num: f[0], name: f[1], set_img_url: f[2] ? RB_MEDIA + f[2] : '' }));
+  const versions = sortVersions(others);
+  const who = plain.plain ? plain.name : charName(plain.name);
   openSheet(`
     <button class="sheet-x" data-close aria-label="Close">✕</button>
-    <h2>Which ${esc(plain.name)} is it?</h2>
-    <p class="muted small">Tap a picture to see it bigger. The pieces you've ticked carry over.</p>
-    <div class="vers">${versions.map((v, i) => versionCard(v, i, 'data-pick')).join('')}</div>
-    <p></p><button class="btn block" data-close>Not now</button>`);
+    <h2>${plain.plain ? `Which ${esc(who)} is it?` : `Change to another ${esc(who)}`}</h2>
+    ${versions.length ? `<p class="muted small">${plain.plain ? '' : `You have <b>${esc(versionLabel(plain.name))}</b>. `}Tap a picture to see it bigger. The pieces you've ticked carry over.</p>
+    <div class="vers">${versions.map((v, i) => versionCard(v, i, 'data-pick')).join('')}</div>`
+    : `<p class="muted">There are no other versions of ${esc(who)}${all || plain.plain ? '' : " (or the list of versions couldn't be loaded; try again later)"}.</p>`}
+    <p></p><button class="btn block" data-close>${plain.plain ? 'Not now' : 'Keep this one'}</button>`);
   document.querySelectorAll('[data-pick]').forEach((b) => {
     const v = versions[Number(b.dataset.pick)];
     b.onclick = () => (b.hasAttribute('data-pic') ? showFigPreview(v.set_num, v.set_img_url, { forPlain: plainNum }) : chooseVersion(plainNum, v.set_num, b));
@@ -2325,13 +2331,16 @@ async function chooseVersion(plainNum, figNum, btn) {
   if (!state.sets[plainNum]) return;
   const before = JSON.stringify(state.sets);
   const ticked = new Map(plain.parts.map((p) => [p.key, p.have]));
+  const n = plain.count || 1;
   const mine = state.sets[fig.setNum];
   if (mine && isFig(mine)) {
-    setFigCount(mine, (mine.count || 1) + 1);
+    setFigCount(mine, (mine.count || 1) + n);
     for (const p of mine.parts) if (ticked.has(p.key)) p.have = Math.min(p.qty, p.have + ticked.get(p.key));
   } else {
+    if (n > 1) setFigCount(fig, n);
     for (const p of fig.parts) if (ticked.has(p.key)) p.have = Math.min(p.qty, ticked.get(p.key));
     fig.addedAt = plain.addedAt || Date.now();
+    if (hasValue(plain)) fig.value = plain.value;
     state.sets[fig.setNum] = fig;
   }
   delete state.sets[plainNum];
@@ -3085,7 +3094,7 @@ function renderSet(setNum) {
         <button class="btn small value-btn" id="valueBtn">${hasValue(set) ? `💷 ${money(set.value)} · edit` : '💷 Add value'}</button>
       </div>
     </div>
-    ${isFig(set) ? renderFigSets(set) : renderSetFigs(set) + renderMovedFigs(set)}
+    ${isFig(set) ? renderFigSets(set) + (set.plain ? '' : '<p class="center small"><button class="link-btn" id="changeVersion">Wrong version? Change it</button></p>') : renderSetFigs(set) + renderMovedFigs(set)}
     ${renderSwapBox(set)}
     <div class="set-controls">
       <div class="seg" id="filter">

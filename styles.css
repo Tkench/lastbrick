@@ -721,3 +721,18 @@ body.welcome .topbar {
 .faq-item summary::after { content: '+'; position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: 22px; font-weight: 700; color: var(--brand); }
 .faq-item[open] summary::after { content: '−'; }
 .faq-item p { margin: 0; padding: 0 16px 16px; line-height: 1.5; }
+
+/* Minifigures: one slim "ideas" bar instead of big suggestion cards */
+.hint-bar { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--card); border: 2px solid var(--brand); border-radius: 16px; padding: 10px 12px; margin: 0 0 14px; color: var(--text); font: inherit; box-shadow: var(--shadow); cursor: pointer; }
+.hint-bar .stack { display: flex; flex: none; }
+.hint-bar .stack > span { width: 36px; height: 36px; border-radius: 50%; background: #fdecec; border: 2px solid var(--card); display: grid; place-items: center; margin-left: -10px; overflow: hidden; }
+.hint-bar .stack > span:first-child { margin-left: 0; }
+.hint-bar .stack img { width: 80%; height: 80%; object-fit: contain; }
+.hint-bar .stack .no-pic { font-size: 18px; }
+.hint-bar b { display: block; font-size: 15px; }
+.hint-bar small { color: var(--muted); font-size: 13px; }
+.hint-bar .chev { margin-left: auto; font-size: 24px; color: var(--brand); font-weight: 700; }
+.hint-faint { margin: -4px 2px 10px; font-size: 13px; }
+.hint-faint .link-btn { color: var(--muted); }
+.hidden-title { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 18px 2px 8px; }
+.fig-hint.is-hidden { opacity: .75; }

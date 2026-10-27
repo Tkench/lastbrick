@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const APP_DATE = '2026-10-27';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -1456,7 +1456,7 @@ function renderSets() {
     if (figs) { resetFigAdd(); go('#addfig'); return; }
     if (accountGate(() => go('#add'))) go('#add');
   };
-  bindFigHints(renderSets);
+  bindFigHints();
   document.querySelectorAll('#collection button').forEach((b) => {
     b.onclick = () => { ui.collection = b.dataset.c; ui.setSearch = ''; savePref('collection', b.dataset.c); renderSets(); };
   });
@@ -1602,38 +1602,82 @@ function hiddenHints() {
   try { return JSON.parse(loadPref('hiddenFigHints', '[]')); } catch { return []; }
 }
 
+// Top of the Minifigures list: one slim bar ("3 ideas for your minifigures"),
+// or a faint link when every idea is hidden. The ideas open in a pop-up.
 function renderFigHints() {
   const hidden = hiddenHints();
-  const list = figSuggestions().filter((g) => !hidden.includes(hintSig(g)));
-  return list.map((g, i) => {
+  const all = figSuggestions();
+  const shown = all.filter((g) => !hidden.includes(hintSig(g)));
+  const nHidden = all.length - shown.length;
+  if (shown.length) {
+    const pics = shown.flatMap((g) => g.figs).slice(0, 3);
+    return `<button class="hint-bar" id="figIdeas">
+      <span class="stack">${pics.map((f) => `<span>${setPic(f)}</span>`).join('')}</span>
+      <span><b>${plural(shown.length, 'idea', 'ideas')} for your minifigures</b><small>Move figures into the sets they came from</small></span>
+      <span class="chev" aria-hidden="true">›</span>
+    </button>`;
+  }
+  return nHidden ? `<p class="hint-faint"><button class="link-btn" id="figIdeas" data-hidden>${plural(nHidden, 'hidden idea', 'hidden ideas')}</button></p>` : '';
+}
+
+function bindFigHints() {
+  const b = $('#figIdeas');
+  if (b) b.onclick = () => showFigIdeas(b.hasAttribute('data-hidden'));
+}
+
+// The ideas pop-up. "Not now" moves an idea to the hidden list; the link at
+// the bottom shows hidden ideas again, where "Show again" brings one back.
+function showFigIdeas(showHidden = false) {
+  const hidden = hiddenHints();
+  const all = figSuggestions();
+  const shown = all.filter((g) => !hidden.includes(hintSig(g)));
+  const off = all.filter((g) => hidden.includes(hintSig(g)));
+  if (!all.length) { closeSheet(); return renderSets(); }
+  const card = (g, isHidden) => {
     const names = g.figs.map((f) => f.name.split(',')[0]);
     const who = names.length === 1 ? `<b>${esc(names[0])}</b> belongs` : `<b>${names.length} of your minifigures</b> belong`;
     return `
-    <div class="card fig-hint ${g.owned ? 'owned' : ''}">
-      <h2>${g.owned ? '🔁' : '💡'} ${g.owned
+    <div class="card fig-hint ${g.owned ? 'owned' : ''} ${isHidden ? 'is-hidden' : ''}">
+      <h2>${g.owned
         ? `${who} in ${esc(g.info.name)}`
         : `${esc(names.slice(0, -1).join(', '))} and ${esc(names[names.length - 1])} all come from ${esc(g.info.name)}`}</h2>
       <p class="muted small">${g.owned ? `You have this set (#${esc(shortSetNum(g.info.setNum))}). Moving ${names.length === 1 ? 'it' : 'them'} ticks the found pieces in the set.` : `#${esc(shortSetNum(g.info.setNum))}${g.info.year ? ' · ' + esc(g.info.year) : ''}. Add the set and move them in? It could be a good one to rebuild next.`}</p>
-      <div class="hint-figs">${g.figs.map((f) => `<div class="thumb" title="${esc(f.name)}">${setPic(f)}</div>`).join('')}${g.info.img ? `<span class="hint-arrow">→</span><div class="thumb">${`<img src="${esc(g.info.img)}" alt="" loading="lazy">`}</div>` : ''}</div>
+      <div class="hint-figs">${g.figs.map((f) => `<div class="thumb" title="${esc(f.name)}">${setPic(f)}</div>`).join('')}${g.info.img ? `<span class="hint-arrow">→</span><div class="thumb"><img src="${esc(g.info.img)}" alt="" loading="lazy"></div>` : ''}</div>
       <div class="row">
-        <button class="btn ${g.owned ? 'ok' : 'primary'} small grow" data-hint-go="${i}">${g.owned ? (names.length === 1 ? 'Move it' : `Move all ${names.length}`) : 'Add set &amp; move them'}</button>
-        <button class="btn small" data-hint-hide="${i}">Not now</button>
+        <button class="btn ${g.owned ? 'ok' : 'primary'} small grow" data-idea-go="${all.indexOf(g)}">${g.owned ? (names.length === 1 ? 'Move it' : `Move all ${names.length}`) : 'Add set &amp; move them'}</button>
+        <button class="btn small" ${isHidden ? 'data-idea-show' : 'data-idea-hide'}="${all.indexOf(g)}">${isHidden ? 'Show again' : 'Not now'}</button>
       </div>
     </div>`;
-  }).join('');
-}
-
-function bindFigHints(rerender) {
-  const hidden = hiddenHints();
-  const list = figSuggestions().filter((g) => !hidden.includes(hintSig(g)));
-  document.querySelectorAll('[data-hint-hide]').forEach((b) => {
+  };
+  openSheet(`
+    <button class="sheet-x" data-close aria-label="Close">✕</button>
+    <h2>Ideas for your minifigures</h2>
+    ${shown.length ? shown.map((g) => card(g, false)).join('') : '<p class="muted">No ideas showing right now.</p>'}
+    ${off.length ? (showHidden
+      ? `<h3 class="hidden-title">Hidden ideas</h3>${off.map((g) => card(g, true)).join('')}<p class="center"><button class="link-btn" id="ideasToggle">Hide them again</button></p>`
+      : `<p class="center"><button class="link-btn" id="ideasToggle">Show ${plural(off.length, 'hidden idea', 'hidden ideas')}</button></p>`) : ''}
+    <button class="btn block" data-close>Done</button>`);
+  const t = $('#ideasToggle');
+  if (t) t.onclick = () => showFigIdeas(!showHidden);
+  const sig = (i) => hintSig(all[Number(i)]);
+  document.querySelectorAll('[data-idea-hide]').forEach((b) => {
     b.onclick = () => {
-      savePref('hiddenFigHints', JSON.stringify([...hiddenHints(), hintSig(list[Number(b.dataset.hintHide)])].slice(-50)));
-      rerender();
+      savePref('hiddenFigHints', JSON.stringify([...hiddenHints(), sig(b.dataset.ideaHide)].slice(-50)));
+      renderSets(); showFigIdeas(showHidden);
     };
   });
-  document.querySelectorAll('[data-hint-go]').forEach((b) => {
-    b.onclick = () => moveFigsToSet(list[Number(b.dataset.hintGo)].figs, list[Number(b.dataset.hintGo)].info, b);
+  document.querySelectorAll('[data-idea-show]').forEach((b) => {
+    b.onclick = () => {
+      savePref('hiddenFigHints', JSON.stringify(hiddenHints().filter((x) => x !== sig(b.dataset.ideaShow))));
+      renderSets(); showFigIdeas(true);
+    };
+  });
+  document.querySelectorAll('[data-idea-go]').forEach((b) => {
+    b.onclick = async () => {
+      const g = all[Number(b.dataset.ideaGo)];
+      // Opens the set when done; if they cancel, come back to the ideas.
+      if (!await moveFigsToSet(g.figs, g.info, b)) showFigIdeas(showHidden);
+    };
   });
 }
 
@@ -1661,6 +1705,7 @@ async function moveFigsToSet(figs, info, btn) {
     lastUndo = () => { state.sets = JSON.parse(before); save(); render(); };
     toast(`🔁 Moved ${names.length === 1 ? names[0] : `${names.length} minifigures`} into ${info.name}${spares ? ` (${plural(spares, 'spare piece stays', 'spare pieces stay')} in Minifigures)` : ''}`, true);
     go('#set/' + encodeURIComponent(info.setNum));
+    return true;
   } catch (e) {
     toast(e.message);
     render();

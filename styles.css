@@ -827,3 +827,11 @@ body.welcome .topbar {
 .vrow b { display: block; }
 .vrow small { display: block; color: var(--muted); font-size: 13px; margin-bottom: 4px; }
 .vrow .chev { margin-left: auto; color: var(--brand); font-size: 22px; font-weight: 700; }
+
+/* Add a set: check it's the right one before adding */
+.add-check { text-align: center; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.add-check .lbl { text-align: left; }
+.add-check-pic { background: #fff; border-radius: 14px; display: flex; justify-content: center; padding: 12px; margin: 6px 0 10px; }
+.add-check-pic img { width: 85%; max-width: 320px; aspect-ratio: 4/3; object-fit: contain; }
+.add-check-pic svg { width: 120px; height: 120px; }
+.add-check h2 { margin: 4px 0 2px; }

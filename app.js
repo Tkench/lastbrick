@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.5.1';
 const APP_DATE = '2026-10-28';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -1535,7 +1535,7 @@ function renderAdd() {
         <button data-v="none" class="active">Start from zero</button>
       </div>
       <p class="muted small" id="modeHelp"></p>
-      <button class="btn primary block" id="fetchBtn">Get parts list</button>
+      <button class="btn primary block" id="fetchBtn">Find set</button>
       <div id="addStatus"></div>
     </div>`;
   let mode = 'none';
@@ -1560,16 +1560,41 @@ function renderAdd() {
     if (!accountGate(() => submit())) return;
     const btn = $('#fetchBtn');
     btn.disabled = true;
-    $('#addStatus').innerHTML = '<div class="spinner"></div><p class="center muted">Downloading parts list…</p>';
+    $('#addStatus').innerHTML = '<div class="spinner"></div><p class="center muted">Finding set…</p>';
     try {
       const set = await fetchSet(num);
       if (!set.parts.length) throw new Error('Rebrickable has no parts list for this set.');
-      if (mode === 'most') set.parts.forEach((p) => { p.have = p.qty; });
-      state.sets[set.setNum] = set;
-      save();
-      ui.setFilter = mode === 'most' ? 'all' : 'missing';
-      location.replace('#set/' + encodeURIComponent(set.setNum));
-      if (mode === 'most') toast('Now untick the pieces that are missing');
+      // Show the set first, so a mistyped number doesn't add the wrong one.
+      const pieces = set.parts.reduce((t, p) => t + p.qty, 0);
+      btn.classList.add('hidden');
+      $('#addStatus').innerHTML = `
+        <div class="add-check">
+          <p class="lbl">Is this your set?</p>
+          <div class="add-check-pic">${set.img ? `<img src="${esc(set.img)}" alt="">` : emptyBrick()}</div>
+          <h2>${esc(set.name)}</h2>
+          <p class="muted">#${esc(shortSetNum(set.setNum))}${set.year ? ' · ' + esc(set.year) : ''} · ${plural(pieces, 'piece', 'pieces')}</p>
+          <button class="btn primary block" id="addYes">Yes, that's my set</button>
+          <p></p>
+          <button class="btn block" id="addNo">No, change the number</button>
+        </div>`;
+      $('#addYes').onclick = () => {
+        if (state.sets[set.setNum]) return go('#set/' + encodeURIComponent(set.setNum));
+        if (mode === 'most') set.parts.forEach((p) => { p.have = p.qty; });
+        set.addedAt = Date.now();
+        state.sets[set.setNum] = set;
+        save();
+        ui.setFilter = mode === 'most' ? 'all' : 'missing';
+        location.replace('#set/' + encodeURIComponent(set.setNum));
+        if (mode === 'most') toast('Now untick the pieces that are missing');
+      };
+      $('#addNo').onclick = () => {
+        $('#addStatus').innerHTML = '';
+        btn.disabled = false;
+        btn.classList.remove('hidden');
+        input.select();
+        input.focus();
+      };
+      $('#addYes').scrollIntoView({ block: 'nearest' });
     } catch (e) {
       btn.disabled = false;
       const msg = e instanceof TypeError ? 'No connection to Rebrickable. Check your internet and try again.' : e.message;
@@ -1578,6 +1603,13 @@ function renderAdd() {
   };
   $('#fetchBtn').onclick = submit;
   input.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+  // Typing a different number puts the Find set button back.
+  input.oninput = () => {
+    if (!$('#addStatus').innerHTML) return;
+    $('#addStatus').innerHTML = '';
+    $('#fetchBtn').disabled = false;
+    $('#fetchBtn').classList.remove('hidden');
+  };
 }
 
 /* ---------- Minifigures: sets they came in, and the Add page ---------- */

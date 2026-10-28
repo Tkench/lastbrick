@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.5.1';
+const APP_VERSION = '1.6.0';
 const APP_DATE = '2026-10-28';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -97,6 +97,7 @@ function save({ fromSync = false } = {}) {
     toast('Could not save on this device: ' + e.message);
   }
   if (!fromSync) scheduleSync();
+  if (!fromSync && sigs.size) funnelStep('first_item');
 }
 
 /* ---------- Account, backup & sync (Supabase) ----------
@@ -332,6 +333,7 @@ function needsAccount() {
 // once they're logged in, runs `then`.
 function accountGate(then = () => render()) {
   if (!needsAccount()) return true;
+  funnelStep('gate');
   openSheet(`
     <div class="gate">
       <button class="sheet-x" data-close aria-label="Close">✕</button>
@@ -373,6 +375,7 @@ async function handleAuthRedirect() {
     render();
     showNewPasswordSheet();
   } else {
+    funnelStep('confirmed');
     await syncNow({ loud: true });
     render();
     savePref('pendingEmail', '');
@@ -771,6 +774,7 @@ async function shrinkImage(file, maxSide = 1024) {
 }
 
 async function identifyPiece(file, api = BRICKOGNIZE_API) {
+  funnelStep('scan');
   const blob = await shrinkImage(file);
   const form = new FormData();
   form.append('query_image', blob, 'piece.jpg');
@@ -991,6 +995,7 @@ function render() {
 
   if (r.name !== 'settings' && r.name !== 'help' && (needsOwnKey() || (!state.welcomed && !Object.keys(state.sets).length))) return renderWelcome();
 
+  if (r.name === 'add' || r.name === 'addfig' || r.name === 'scan') funnelStep('start');
   switch (r.name) {
     case 'set': return renderSet(r.arg);
     case 'add': return renderAdd();
@@ -1155,7 +1160,7 @@ function renderWelcome() {
     </footer>`;
   bindSwipeCards('steps');
   if ($('#startBtn')) {
-    $('#startBtn').onclick = () => { state.welcomed = true; save(); go('#add'); render(); };
+    $('#startBtn').onclick = () => { funnelStep('start'); state.welcomed = true; save(); go('#add'); render(); };
     return;
   }
   $('#saveKey').onclick = () => {
@@ -3951,6 +3956,76 @@ function loadCloudflareAnalytics() {
   document.head.appendChild(s);
 }
 
+/* Steps people reach, to see where they stop: each counted once per device,
+ * with the link they first came from. Nothing identifying is sent. */
+const FUNNEL_STEPS = [
+  ['visit', 'Visited for the first time'],
+  ['start', 'Started (tapped to add or scan)'],
+  ['first_item', 'Added a first set or minifigure'],
+  ['gate', 'Saw "create a free account"'],
+  ['register_start', 'Tapped Create account'],
+  ['registered', 'Registered'],
+  ['confirmed', 'Confirmed their email'],
+];
+const funnelBusy = new Set();
+function funnelStep(step) {
+  if (!syncEnabled() || (/^(localhost|127\.)/.test(location.hostname) && !window.FUNNEL_TEST)) return;
+  if (loadPref('step.' + step, '') || funnelBusy.has(step)) return;
+  funnelBusy.add(step);
+  sbFetch('/rest/v1/funnel', {
+    method: 'POST', headers: { Prefer: 'return=minimal' },
+    body: { step, source: loadPref('firstSource', '') || null },
+  }).then(() => savePref('step.' + step, '1')).catch(() => { /* try again next time */ }).finally(() => funnelBusy.delete(step));
+}
+// On opening: devices that were already using the app before steps were counted
+// get their earlier steps marked as done (not counted), so only new people count.
+function startFunnel() {
+  const newHere = !loadPref('seen', '');
+  if (newHere) {
+    if (!loadPref('firstSource', '')) savePref('firstSource', VISIT_SOURCE || 'direct');
+    funnelStep('visit');
+    return;
+  }
+  const done = ['visit'];
+  if (Object.keys(state.sets).length || state.welcomed) done.push('start', 'first_item');
+  if (session) done.push('gate', 'register_start', 'registered', 'confirmed');
+  for (const k of done) if (!loadPref('step.' + k, '')) savePref('step.' + k, 'before');
+}
+
+// The Stats page funnel: how many new devices reached each step, and the biggest drop.
+function renderFunnel(f, range) {
+  const counts = f[range] || {};
+  const start = counts.visit || 0;
+  const rows = FUNNEL_STEPS.map(([k, label]) => [k, label, counts[k] || 0]);
+  let worst = -1, worstLoss = 0;
+  rows.forEach(([, , n], i) => {
+    if (!i) return;
+    const loss = rows[i - 1][2] - n;
+    if (loss > worstLoss) { worstLoss = loss; worst = i; }
+  });
+  $('#funnelCard').innerHTML = `
+    <div class="seg funnel-range">
+      <button data-range="days2" class="${range === 'days2' ? 'active' : ''}">Today &amp; yesterday</button>
+      <button data-range="week" class="${range === 'week' ? 'active' : ''}">Last 7 days</button>
+    </div>
+    ${start ? rows.map(([k, label, n], i) => `
+      <div class="funnel-row ${i === worst ? 'worst' : ''}">
+        <div class="src-top"><b>${esc(label)}</b><span>${fmtNum(n)}${i ? ` <em class="muted">· ${Math.round((n / start) * 100)}%</em>` : ''}</span></div>
+        <div class="src-bar"><span style="width:${Math.max(n ? 2 : 0, Math.round((n / start) * 100))}%"></span></div>
+        ${i === worst ? `<div class="small funnel-note">⬆ Biggest drop: ${fmtNum(worstLoss)} ${worstLoss === 1 ? 'person' : 'people'} stopped here</div>` : ''}
+      </div>`).join('')
+      : '<p class="muted small">No new visitors counted yet. Steps are counted from when this was switched on, for people new to Last Brick.</p>'}
+    ${counts.scan ? `<p class="muted small">${fmtNum(counts.scan)} tried scanning a piece or figure.</p>` : ''}
+    ${(f.bySource || []).length ? `
+      <h3 class="steps-title">By link <span class="muted">(last 7 days)</span></h3>
+      <div class="funnel-src"><span></span><b>Visited</b><b>Added</b><b>Registered</b>
+      ${f.bySource.map((x) => `<span>${esc(x.source)}</span><em>${fmtNum(x.visit)}</em><em>${fmtNum(x.first_item)}</em><em>${fmtNum(x.registered)}</em>`).join('')}</div>` : ''}
+    <p class="muted small">Each phone or computer is counted once per step, from the first time it reaches it. People who used Last Brick before this was switched on aren't counted.</p>`;
+  document.querySelectorAll('[data-range]').forEach((b) => {
+    b.onclick = () => { savePref('funnelRange', b.dataset.range); renderFunnel(f, b.dataset.range); };
+  });
+}
+
 function countVisit() {
   if (!syncEnabled() || /^(localhost|127\.)/.test(location.hostname)) return;
   const today = new Date().toISOString().slice(0, 10); // matches the database's day (UTC)
@@ -4046,6 +4121,8 @@ async function renderStats() {
       </div>`).join('') : '<p class="muted small">Nothing yet.</p>');
 
   $('#view').innerHTML = `
+    <h3 class="steps-title">Where people drop off</h3>
+    <div class="card" id="funnelCard">${d.funnel ? '' : '<p class="muted small">Run the latest <b>supabase/stats.sql</b> in the SQL Editor to start counting steps.</p>'}</div>
     <h3 class="steps-title">Visitors</h3>
     <div class="stat-grid">
       ${statTile(fmtNum(v.today), 'today')}
@@ -4121,6 +4198,7 @@ async function renderStats() {
     </div>
     <p class="muted small center">Only you can see this page.</p>`;
   bindBarChart('visitChart', v.byDay, visitsOpts);
+  if (d.funnel) renderFunnel(d.funnel, loadPref('funnelRange', 'days2'));
   bindBarChart('signupChart', a.byWeek, signupOpts);
 }
 
@@ -4283,8 +4361,11 @@ function renderAccountCard() {
       return;
     }
     busy(true);
+    funnelStep('register_start');
     try {
-      if (await register(c.email, c.password)) {
+      const signedIn = await register(c.email, c.password);
+      funnelStep('registered');
+      if (signedIn) {
         authDone('Account created — your sets are backed up');
       } else {
         busy(false);
@@ -4374,6 +4455,7 @@ document.querySelectorAll('#tabs button').forEach((b) => {
 $('#tabs [data-tab="scan"] .ico').innerHTML = scanIcon({ cls: 'tab-svg' });
 $('#backBtn').onclick = () => (history.length > 1 ? history.back() : go('#sets'));
 
+startFunnel(); // before the first render, so returning devices aren't counted as new
 render();
 handleAuthRedirect().then(() => { syncNow(); countVisit(); });
 loadCloudflareAnalytics();

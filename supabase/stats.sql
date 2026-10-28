@@ -21,6 +21,23 @@ create policy "Anyone can count a visit" on public.visits
   for insert to anon, authenticated
   with check (day = current_date);
 
+-- 1b. Steps: where new visitors stop. One row each time a device reaches a step
+--     for the first time (visited, started, added a first item, saw the account
+--     screen, tapped Create account, registered, confirmed their email), with
+--     the link it first came from. No account, no IP, nothing identifying.
+create table if not exists public.funnel (
+  id bigint generated always as identity primary key,
+  day date not null default current_date,
+  step text not null check (step in ('visit', 'start', 'scan', 'first_item', 'gate', 'register_start', 'registered', 'confirmed')),
+  source text check (length(source) <= 60)
+);
+alter table public.funnel enable row level security;
+
+drop policy if exists "Anyone can count a step" on public.funnel;
+create policy "Anyone can count a step" on public.funnel
+  for insert to anon, authenticated
+  with check (day = current_date);
+
 -- 2. Who can see the Stats page. Only accounts listed here.
 create table if not exists public.admins (
   user_id uuid primary key references auth.users (id) on delete cascade
@@ -123,6 +140,19 @@ begin
       from per_item where is_fig group by num order by count(*) desc, max(name) limit 10) t),
     'mostMissing', (select coalesce(jsonb_agg(t), '[]') from (
       select key, name, colour, img, missing, people from missing order by people desc, missing desc limit 10) t),
+    'funnel', jsonb_build_object(
+      'days2', (select coalesce(jsonb_object_agg(step, n), '{}') from (
+        select step, count(*) as n from public.funnel where day >= current_date - 1 group by step) t),
+      'week', (select coalesce(jsonb_object_agg(step, n), '{}') from (
+        select step, count(*) as n from public.funnel where day > current_date - 7 group by step) t),
+      'bySource', (select coalesce(jsonb_agg(t), '[]') from (
+        select coalesce(nullif(source, ''), 'unknown') as source,
+               count(*) filter (where step = 'visit') as visit,
+               count(*) filter (where step = 'first_item') as first_item,
+               count(*) filter (where step = 'registered') as registered
+        from public.funnel where day > current_date - 7
+        group by 1 order by 2 desc limit 8) t)
+    ),
     'reports', jsonb_build_object(
       'total', (select count(*) from public.reports),
       'week', (select count(*) from public.reports where created_at > now() - interval '7 days'),

@@ -36,7 +36,7 @@ Until the function is deployed, the app falls back to a personal Rebrickable key
 
 ## Visit counter and Stats page
 
-The app records one visit per device per day (just the date and three yes/no answers: new visitor, logged in, installed; nothing identifying). Accounts listed in the `admins` table get a **Stats** page under Settings: visitors, sign-ups, popular sets and minifigures, most-wanted pieces and recent problem reports. Run [`supabase/stats.sql`](supabase/stats.sql) once in the SQL Editor (it adds the first admin).
+The app records one visit per device per day (just the date and three yes/no answers: new visitor, logged in, installed; nothing identifying). Accounts listed in the `admins` table get a **Stats** page under Settings: visitors, sign-ups, popular sets and minifigures, most-wanted pieces and recent problem reports. Run [`supabase/stats.sql`](supabase/stats.sql) once in the SQL Editor (it adds the first admin). It also counts how far new visitors get (visited, started, added a first item, saw the account screen, registered, confirmed), shown as **Where people drop off** on the Stats page; re-run the file after updates so new parts are added.
 
 ## Login, backup and sync (optional)
 

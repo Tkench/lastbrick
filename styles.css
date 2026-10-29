@@ -1008,3 +1008,14 @@ body.welcome .topbar {
 .funnel-extra div { display: flex; align-items: baseline; gap: 8px; }
 .funnel-extra b { min-width: 28px; text-align: right; font-size: 16px; }
 .funnel-extra i { font-style: normal; font-weight: 600; }
+
+/* Stats: sections that open and close */
+.stats-sec { padding: 0; }
+.stats-sec summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 15px 16px; cursor: pointer; }
+.stats-sec summary::-webkit-details-marker { display: none; }
+.stats-sec summary b { font-size: 17px; }
+.stats-sec summary em { margin-left: auto; font-style: normal; font-weight: 600; font-size: 14px; color: var(--muted); text-align: right; }
+.stats-sec summary .chev { color: var(--brand); font-weight: 800; font-size: 22px; line-height: 1; transition: transform .15s; }
+.stats-sec[open] summary .chev { transform: rotate(90deg); }
+.stats-body { padding: 0 16px 16px; }
+.stats-body .stat-grid { margin-bottom: 8px; }

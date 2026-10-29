@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.9.3';
+const APP_VERSION = '1.9.4';
 const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -4326,9 +4326,17 @@ async function renderStats() {
         <span class="badge ok">${x.people} ${x.people === 1 ? 'person' : 'people'}</span>
       </div>`).join('') : '<p class="muted small">Nothing yet.</p>');
 
+  // Sections open and close (remembered); the visitor numbers always show.
+  const open = new Set(JSON.parse(loadPref('statsOpen', '[]') || '[]'));
+  const sec = (id, title, summary, body) => `
+    <details class="card stats-sec" data-stats="${id}" ${open.has(id) ? 'open' : ''}>
+      <summary><span class="chev" aria-hidden="true">›</span><b>${title}</b><em>${summary}</em></summary>
+      <div class="stats-body">${body}</div>
+    </details>`;
+  const topSource = (v.sources || []).reduce((m, x) => { const p = x.source.split('/')[0]; m[p] = (m[p] || 0) + x.visits; return m; }, {});
+  const best = Object.entries(topSource).sort((x, y) => y[1] - x[1])[0];
+  const f2 = (d.funnel && d.funnel.days2) || {};
   $('#view').innerHTML = `
-    <h3 class="steps-title">Where people drop off</h3>
-    <div class="card" id="funnelCard">${d.funnel ? '' : '<p class="muted small">Run the latest <b>supabase/stats.sql</b> in the SQL Editor to start counting steps.</p>'}</div>
     <h3 class="steps-title">Visitors</h3>
     <div class="stat-grid">
       ${statTile(fmtNum(v.today), 'today')}
@@ -4336,65 +4344,57 @@ async function renderStats() {
       ${statTile(fmtNum(v.month), 'last 30 days')}
       ${statTile(fmtNum(v.newMonth), 'new visitors', 'last 30 days')}
     </div>
-    <div class="card">
-      <h2>Visitors per day <span class="muted small">last 30 days</span></h2>
+    ${sec('perday', 'Visitors per day', 'last 30 days', `
       ${barChart('visitChart', v.byDay, visitsOpts)}
-      <p class="muted small">A visitor is one phone or computer opening the app on a day. ${fmtNum(v.installedMonth)} of the last 30 days' visits were from the app on a home screen.</p>
-    </div>
-    <div class="card">
-      <h2>Where visitors came from <span class="muted small">last 30 days</span></h2>
+      <p class="muted small">A visitor is one phone or computer opening the app on a day. ${fmtNum(v.installedMonth)} of the last 30 days' visits were from the app on a home screen.</p>`)}
+    ${sec('sources', 'Where visitors came from', best ? `${esc(best[0])} · ${fmtNum(best[1])}` : 'nothing yet', `
+      <p class="muted small" style="margin-top:0">Last 30 days.</p>
       ${(v.sources || []).length ? sourceRows(v.sources) : '<p class="muted small">Nothing yet.</p>'}
-      <p class="muted small">Tip: give each post its own link, e.g. <b>lastbrick.co.uk/?utm_source=facebook&amp;utm_content=group3</b>, to see exactly which one brought people in. "No extra tag" includes visits from before tags were saved.</p>
-    </div>
-
-    <h3 class="steps-title">Accounts</h3>
-    <div class="stat-grid">
-      ${statTile(fmtNum(a.total), 'accounts', `${fmtNum(a.week)} new this week`)}
-      ${statTile(fmtNum(a.activeWeek), 'active this week')}
-      ${statTile(fmtNum(a.unconfirmed), 'not confirmed', 'email link not tapped')}
-      ${statTile(fmtNum(c.people), 'with a backup')}
-    </div>
-    <div class="card">
-      <h2>Sign-ups per week <span class="muted small">last 12 weeks</span></h2>
-      ${barChart('signupChart', a.byWeek, signupOpts)}
-    </div>
-
-    <h3 class="steps-title">Collections <span class="muted">(accounts only)</span></h3>
-    <div class="stat-grid">
-      ${statTile(fmtNum(c.sets), 'sets', `${fmtNum(c.complete)} complete`)}
-      ${statTile(fmtNum(c.figs), 'minifigures')}
-      ${statTile(pctFound + '%', 'pieces found', `${fmtNum(c.have)} of ${fmtNum(c.need)}`)}
-      ${statTile(c.value ? money(Number(c.value)) : '–', 'total value', 'where entered')}
-    </div>
-    <p class="muted small">Looked up by anyone (with or without an account): ${plural(c.lookedUp, 'different set', 'different sets')} and ${plural(c.figsLookedUp, 'minifigure', 'minifigures')}.</p>
-    <div class="card"><h2>Most popular sets</h2>${rankList(d.topSets, false)}</div>
-    <div class="card"><h2>Most popular minifigures</h2>${rankList(d.topFigs, true)}</div>
-    <div class="card">
-      <h2>Most-wanted pieces</h2>
+      <p class="muted small">Tip: give each post its own link, e.g. <b>lastbrick.co.uk/?utm_source=facebook&amp;utm_content=group3</b>, to see exactly which one brought people in. "No extra tag" includes visits from before tags were saved.</p>`)}
+    ${sec('funnel', 'Where people drop off', d.funnel ? `${fmtNum(f2.visit || 0)} new → ${fmtNum(f2.start || 0)} started` : 'not set up', `<div id="funnelCard">${d.funnel ? '' : '<p class="muted small">Run the latest <b>supabase/stats.sql</b> in the SQL Editor to start counting steps.</p>'}</div>`)}
+    ${sec('accounts', 'Accounts', `${fmtNum(a.total)} · ${fmtNum(a.week)} new this week`, `
+      <div class="stat-grid">
+        ${statTile(fmtNum(a.total), 'accounts', `${fmtNum(a.week)} new this week`)}
+        ${statTile(fmtNum(a.activeWeek), 'active this week')}
+        ${statTile(fmtNum(a.unconfirmed), 'not confirmed', 'email link not tapped')}
+        ${statTile(fmtNum(c.people), 'with a backup')}
+      </div>
+      <h3 class="steps-title">Sign-ups per week <span class="muted">(last 12 weeks)</span></h3>
+      ${barChart('signupChart', a.byWeek, signupOpts)}`)}
+    ${sec('collections', 'Collections', `${fmtNum(c.sets)} sets · ${fmtNum(c.figs)} minifigures`, `
+      <p class="muted small" style="margin-top:0">Accounts only.</p>
+      <div class="stat-grid">
+        ${statTile(fmtNum(c.sets), 'sets', `${fmtNum(c.complete)} complete`)}
+        ${statTile(fmtNum(c.figs), 'minifigures')}
+        ${statTile(pctFound + '%', 'pieces found', `${fmtNum(c.have)} of ${fmtNum(c.need)}`)}
+        ${statTile(c.value ? money(Number(c.value)) : '–', 'total value', 'where entered')}
+      </div>
+      <p class="muted small">Looked up by anyone (with or without an account): ${plural(c.lookedUp, 'different set', 'different sets')} and ${plural(c.figsLookedUp, 'minifigure', 'minifigures')}.</p>`)}
+    ${sec('popular', 'Popular sets, minifigures &amp; pieces', d.topSets.length ? esc(d.topSets[0].name || d.topSets[0].num) : 'nothing yet', `
+      <h3 class="steps-title">Most popular sets</h3>${rankList(d.topSets, false)}
+      <h3 class="steps-title">Most popular minifigures</h3>${rankList(d.topFigs, true)}
+      <h3 class="steps-title">Most-wanted pieces</h3>
       <p class="muted small">Pieces the most people are still looking for.</p>
       ${d.mostMissing.length ? d.mostMissing.map((x) => `
         <div class="rank-row">
           ${thumb(x.img, false)}
           <div class="grow" style="min-width:0"><div class="sname"><b>${esc(x.name)}</b></div><div class="small muted">${esc(x.colour)}</div></div>
           <span class="badge miss">${x.people} ${x.people === 1 ? 'person' : 'people'} · ${x.missing} needed</span>
-        </div>`).join('') : '<p class="muted small">Nothing yet.</p>'}
-    </div>
-
-    <h3 class="steps-title">Problem reports</h3>
-    <div class="stat-grid">
-      ${statTile(fmtNum(r.total), 'reports')}
-      ${statTile(fmtNum(r.week), 'this week')}
-    </div>
-    <div class="card">
-      <h2>Latest reports</h2>
+        </div>`).join('') : '<p class="muted small">Nothing yet.</p>'}`)}
+    ${sec('reports', 'Problem reports', `${fmtNum(r.total)} · ${fmtNum(r.week)} this week`, `
       ${r.recent.length ? r.recent.map((x) => `
         <div class="report-row">
           <div class="small muted">${esc(new Date(x.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))} · ${esc({ scan: 'Scan', minifig: 'Minifigure', general: 'General' }[x.kind] || x.kind)}${x.wants_reply ? ' · <b>wants a reply</b>' : ''}</div>
           <div>${x.message ? esc(x.message) : '<span class="muted">(no message)</span>'}</div>
         </div>`).join('') : '<p class="muted small">No reports yet.</p>'}
-      <p class="muted small">Full details (and reply email addresses) are in Supabase → Table Editor → reports.</p>
-    </div>
+      <p class="muted small">Full details (and reply email addresses) are in Supabase → Table Editor → reports.</p>`)}
     <p class="muted small center">Only you can see this page.</p>`;
+  document.querySelectorAll('.stats-sec').forEach((el) => {
+    el.addEventListener('toggle', () => {
+      if (el.open) open.add(el.dataset.stats); else open.delete(el.dataset.stats);
+      savePref('statsOpen', JSON.stringify([...open]));
+    });
+  });
   bindBarChart('visitChart', v.byDay, visitsOpts);
   if (d.funnel) renderFunnel(d.funnel, loadPref('funnelRange', 'days2'));
   bindBarChart('signupChart', a.byWeek, signupOpts);

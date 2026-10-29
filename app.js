@@ -1151,7 +1151,7 @@ function renderWelcome() {
   $('#view').innerHTML = `
     <div class="welcome-first">
     <section class="hero welcome-hero">
-      <h2 class="hero-title">Got a box of mixed LEGO®?<br><span class="accent">Turn it back into sets.</span></h2>
+      <h2 class="hero-title">Got a box of mixed LEGO®?<br><span class="accent">Your old sets are still in&nbsp;there.</span></h2>
       <p class="hero-sub">Pick one to try now. It's free.</p>
     </section>
     ${needsOwnKey() ? `<div class="card">

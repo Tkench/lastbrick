@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.7.1';
 const APP_DATE = '2026-10-29';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -1127,9 +1127,29 @@ function scanHeadIcon(cls = 'scan-ico') {
   </svg>`;
 }
 
+// A red brick with a green tick, for "Tick what you have".
+function tickBrickIcon(cls = 'scan-ico') {
+  const [f, e] = BRICK_COLOURS.r;
+  return `<svg class="${cls}" viewBox="0 0 28 26" aria-hidden="true">
+    ${[0, 1, 2].map((i) => `<rect x="${5.2 + i * 5.2}" y="6" width="3.4" height="2.6" rx=".8" fill="${f}" stroke="${e}" stroke-width=".8"/>`).join('')}
+    <rect x="3.5" y="8.2" width="18" height="11" rx="1.6" fill="${f}" stroke="${e}" stroke-width="1"/>
+    <circle cx="21.5" cy="18.5" r="5.6" fill="#1f8a3a" stroke="#fff" stroke-width="1.4"/>
+    <path d="M18.9 18.6 L20.8 20.5 L24.2 16.9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+// The steps on the welcome page, in the same order as its two buttons.
+const HOW_IT_WORKS = () => [
+  [scanFigIcon('scan-ico big'), 'Scan a minifigure', 'Snap a photo to find out who it is and which set it came from.'],
+  [scanIcon({ cls: 'scan-ico big' }), 'Add your sets', 'Type the number from the box or manual and the full parts list appears.'],
+  [tickBrickIcon('scan-ico big'), 'Tick what you have', 'See exactly which pieces are still missing, in every colour.'],
+  [scanHeadIcon('scan-ico big'), 'Find and scan pieces', 'Spot a piece in the pile? Scan it to see which of your sets needs it.'],
+];
+
 function renderWelcome() {
   setWelcomeHeader();
   $('#view').innerHTML = `
+    <div class="welcome-first">
     <section class="hero welcome-hero">
       <h2 class="hero-title">Got a box of mixed LEGO®?<br><span class="accent">Turn it back into sets.</span></h2>
       <p class="hero-sub">Pick one to try now. It's free.</p>
@@ -1162,17 +1182,21 @@ function renderWelcome() {
       <div><b>Free</b>no sign-up</div>
     </div>`}
     ${syncEnabled() ? `<p class="center small hero-login">Already have an account? <a href="#settings">Log in</a></p>` : ''}
-    <h3 class="steps-title">How it works</h3>
-    ${swipeCards('steps', [
-      ['📖', 'Add your sets', 'Type the number from the box or manual and the full parts list appears.'],
-      ['✅', 'Tick what you have', 'See exactly which pieces are still missing, in every colour.'],
-      [scanIcon({ cls: 'scan-ico big' }), 'Find and scan', 'Spot a piece in the pile? Scan it to see which set needs it.'],
-    ])}
+    <button class="scroll-hint" id="howBtn">How it works <span class="scroll-arrow" aria-hidden="true">↓</span></button>
+    </div>
+    <section class="welcome-how" id="how">
+    ${swipeCards('steps', HOW_IT_WORKS())}
+    ${needsOwnKey() ? '' : `<button class="btn primary block hero-cta" id="tryNow">${scanFigIcon('scan-ico btn-ico')} Try it now: scan a minifigure</button>
+    <p class="center small"><button class="link-btn" id="tryNowSet">or add a set by number</button></p>`}
+    </section>
     <footer class="welcome-foot small muted">
       <a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Use</a>
       <p>LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.</p>
     </footer>`;
   bindSwipeCards('steps');
+  $('#howBtn').onclick = () => $('#how').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if ($('#tryNow')) $('#tryNow').onclick = () => $('#startFig').click();
+  if ($('#tryNowSet')) $('#tryNowSet').onclick = () => $('#startBtn').click();
   if ($('#startBtn')) {
     $('#startBtn').onclick = () => { funnelStep('start'); state.welcomed = true; save(); go('#add'); render(); };
     // Straight to the camera: the Add a minifigure page shows the answer.
@@ -4450,7 +4474,7 @@ function renderAccountCard() {
 /* ---------- Help & FAQ ---------- */
 const FAQ = [
   ['What is Last Brick?',
-    "Last Brick helps you rebuild LEGO® sets from a box of mixed bricks. Add a set and you get its full parts list. Tick off pieces as you find them, and the <b>Looking for</b> tab shows what's still missing across all your sets."],
+    "Last Brick helps you turn a box of mixed LEGO® back into sets. Scan a minifigure to find out who it is and which set it came from. Add a set and you get its full parts list: tick off pieces as you find them, and the <b>Looking for</b> tab shows what's still missing across all your sets."],
   ['Is it free?',
     "Yes. Last Brick is free to use. Without an account you can save one set or minifigure to try it out. Create a free account to save as many as you like."],
   ['Why do I need an account?',

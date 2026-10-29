@@ -1,6 +1,8 @@
 # Last Brick
 
-A phone app for rebuilding old LEGO sets from a big pile of mixed bricks.
+A phone app for turning a box of mixed LEGO back into sets.
+
+- **Scan a minifigure** to find out who it is (character first, then the exact version) and which set it came from.
 
 - **Add a set by number** (e.g. `6080`). The app downloads the parts list (the same one printed at the back of the manual) with a **picture of every piece**, its colour and part number.
 - **Tick off what you have.** For sets that are nearly complete, choose *Mostly complete* and untick only the missing pieces.

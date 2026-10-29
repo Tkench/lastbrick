@@ -1,7 +1,7 @@
 {
   "name": "Last Brick",
   "short_name": "Last Brick",
-  "description": "Track missing pieces for your LEGO sets.",
+  "description": "Turn a box of mixed LEGO back into sets: identify minifigures and find the missing pieces.",
   "start_url": "./#sets",
   "scope": "./",
   "display": "standalone",

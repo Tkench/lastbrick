@@ -962,3 +962,45 @@ body.welcome .topbar {
 .for-set .thumb img { max-width: 90%; max-height: 90%; object-fit: contain; }
 .for-set .sname { flex: 1; min-width: 0; }
 .for-set .btn { flex: none; }
+
+/* Looking for: − / + per set, finished lines go green */
+.lf-set .cnt, .for-set .cnt { display: flex; align-items: center; gap: 6px; flex: none; }
+.cnt button { width: 36px; height: 36px; border-radius: 10px; border: 0; background: var(--chip); font-size: 20px; font-weight: 800; line-height: 1; }
+.cnt b { min-width: 40px; text-align: center; font-size: 15px; }
+.cnt b small { color: var(--muted); font-weight: 600; }
+.lf-set.done .sname { color: var(--ok); }
+.lf-set.done .sname::before { content: '✓ '; font-weight: 800; }
+.lf-set.done .cnt b { color: var(--ok); }
+/* One wide Sort & filter button on Looking for */
+.sf-wide { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; background: var(--card); border: 1px solid var(--line); position: relative; }
+.sf-wide svg { width: 20px; height: 20px; }
+.sf-wide.on { border-color: var(--brand); color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+.sf-wide .fcount { position: absolute; right: 12px; }
+/* The Sort & filter panel: sections that open and close, Show button always visible */
+.filter-sheet { padding-bottom: 76px; }
+.fsec { background: var(--card); border-radius: 14px; margin-bottom: 10px; box-shadow: var(--shadow); }
+.fsec summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 13px 14px; font-weight: 700; cursor: pointer; }
+.fsec summary::-webkit-details-marker { display: none; }
+.fsec summary em { font-style: normal; font-weight: 600; color: var(--muted); font-size: 14px; margin-left: auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fsec summary .chev { color: var(--brand); font-weight: 800; font-size: 20px; line-height: 1; transition: transform .15s; }
+.fsec[open] summary .chev { transform: rotate(90deg); }
+.fsec-body { padding: 0 12px 12px; }
+.fchips { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.fchips.three { grid-template-columns: 1fr 1fr 1fr; }
+.fchips .fchip { min-width: 0; padding: 7px 8px; font-size: 13px; }
+.fchips .fchip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fmore { display: block; margin: 8px auto 0; font-weight: 700; }
+.fset { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 2px; border: 0; border-top: 1px solid var(--line); background: none; font: inherit; color: var(--text); }
+.fset .thumb { flex: none; width: 42px; height: 42px; background: #fff; border-radius: 8px; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--line); }
+.fset .thumb img { max-width: 90%; max-height: 90%; object-fit: contain; }
+.fset b { display: block; line-height: 1.25; }
+.fset small { display: block; color: var(--muted); font-size: 12px; }
+.fset .switch { flex: none; width: 46px; height: 28px; border-radius: 999px; background: var(--ok); position: relative; transition: background .15s; }
+.fset .switch::after { content: ''; position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.fset.off .switch { background: #c9c9d1; }
+.fset.off .switch::after { right: auto; left: 3px; }
+.fset.off .thumb, .fset.off .grow { opacity: .45; }
+.filter-foot { position: sticky; bottom: calc(-16px - env(safe-area-inset-bottom)); display: flex; gap: 10px; margin: 8px -16px calc(-16px - env(safe-area-inset-bottom)); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--bg); box-shadow: 0 -6px 14px rgba(0,0,0,.08); }
+.filter-foot .btn { flex: 1; }
+.filter-foot .btn.primary { flex: 2; }
+.filter-foot .btn.primary { margin-top: 0; } .filter-sheet { padding-bottom: 0; }

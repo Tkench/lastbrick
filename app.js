@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.8.1';
+const APP_VERSION = '1.9.0';
 const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -3432,6 +3432,18 @@ function missingGroups() {
   return [...groups.values()];
 }
 
+// Sets switched off in Looking for's filter (their pieces are hidden there only).
+function lfHidden() {
+  try { return JSON.parse(loadPref('lfHidden', '[]')).filter((n) => state.sets[n]); } catch { return []; }
+}
+// Missing pieces without the hidden sets.
+function lfGroups(hidden = new Set(lfHidden())) {
+  return missingGroups().map((g) => {
+    const sets = g.sets.filter((x) => !hidden.has(x.set.setNum));
+    return { ...g, sets, total: sets.reduce((t, x) => t + x.need, 0) };
+  }).filter((g) => g.sets.length);
+}
+
 // Small red "last brick" used on empty screens.
 function emptyBrick() {
   const [f, e] = BRICK_COLOURS.r;
@@ -3511,9 +3523,17 @@ function groupMissing(shown) {
 
 function renderMissing() {
   setTitle('Looking for');
-  const all = missingGroups();
+  const everything = missingGroups();
+  const hiddenList = lfHidden();
+  const hidden = new Set(hiddenList);
+  const all = lfGroups(hidden);
   if (!Object.keys(state.sets).length) {
     $('#view').innerHTML = `<div class="empty">${emptyBrick()}<b>Nothing to look for yet</b><br>Add a set or minifigure first, and all its missing pieces show up here.</div>`;
+    return;
+  }
+  if (!all.length && everything.length) {
+    $('#view').innerHTML = `<div class="empty">${emptyBrick()}<b>Nothing to show</b><br>Your remaining missing pieces are all in hidden sets.<p></p><button class="btn primary" id="showHidden">Show ${plural(hiddenList.length, 'hidden set', 'hidden sets')}</button></div>`;
+    $('#showHidden').onclick = () => { savePref('lfHidden', '[]'); renderMissing(); };
     return;
   }
   if (!all.length) {
@@ -3540,18 +3560,12 @@ function renderMissing() {
     <section class="lf-head">
       <h2 class="lf-title"><span id="lfTotal">${totalPieces} ${totalPieces === 1 ? 'piece' : 'pieces'}</span> to find<br><span class="accent">across ${across}</span></h2>
     </section>
-    <div class="sets-toolbar lf-toolbar">
-      <label class="sort-select">
-        <span class="muted small">Sort</span>
-        <select id="missingSort" aria-label="Sort missing pieces">
-          ${MISSING_SORTS.map(([v, label]) => `<option value="${v}" ${ui.missingSort === v ? 'selected' : ''}>${label}</option>`).join('')}
-        </select>
-      </label>
-      ${filterButton(ui.missingColor, ui.missingType)}
-      <div class="view-toggle" role="group" aria-label="View">
-        ${MISSING_VIEWS.map(([v, icon, label]) => `<button data-mview="${v}" class="${ui.missingView === v ? 'active' : ''}" aria-label="${label} view" title="${label}">${icon}</button>`).join('')}
-      </div>
-    </div>
+    <button class="btn block sf-wide ${filtering || hidden.size ? 'on' : ''}" id="filterBtn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      Sort &amp; filter <span class="muted small">· ${esc((MISSING_SORTS.find((x) => x[0] === ui.missingSort) || [])[1] || '')}</span>
+      ${(filtering ? (ui.missingColor ? 1 : 0) + (ui.missingType ? 1 : 0) : 0) + (hidden.size ? 1 : 0) ? `<span class="fcount">${(ui.missingColor ? 1 : 0) + (ui.missingType ? 1 : 0) + (hidden.size ? 1 : 0)}</span>` : ''}
+    </button>
+    ${hidden.size ? `<div class="active-filters"><button class="pill" id="unhideSets">${plural(hidden.size, 'set', 'sets')} hidden ✕</button></div>` : ''}
     ${activeFilterTags(ui.missingColor, activeColour, ui.missingType, `Showing ${shownPieces} of ${totalPieces}:`)}`;
 
   if (!shown.length) html += `<div class="empty">No missing pieces match these filters.</div>`;
@@ -3562,42 +3576,53 @@ function renderMissing() {
   $('#view').innerHTML = html;
 
   const rerender = () => { const y = window.scrollY; renderMissing(); window.scrollTo(0, y); };
-  const sortSel = $('#missingSort');
-  sortSel.onchange = () => { ui.missingSort = sortSel.value; savePref('missingSort', sortSel.value); rerender(); };
-  document.querySelectorAll('[data-mview]').forEach((b) => {
-    b.onclick = () => { ui.missingView = b.dataset.mview; savePref('missingView2', b.dataset.mview); rerender(); };
-  });
-  $('#filterBtn').onclick = () => showFilterSheet(
-    all.map((g) => ({ colour: g.part.colorName, rgb: g.part.rgb, type: g.type, n: g.total })),
+  $('#filterBtn').onclick = () => {
+    // Worked out now, so − / + taps since the page was drawn are counted.
+    const now = missingGroups();
+    const setMissing = new Map();
+    for (const g of now) for (const x of g.sets) setMissing.set(x.set.setNum, (setMissing.get(x.set.setNum) || 0) + x.need);
+    const setList = [...setMissing].sort((x, y) => y[1] - x[1]).map(([n, missing]) => ({ ...state.sets[n], missing }));
+    showFilterSheet(
+    now.flatMap((g) => g.sets.map((x) => ({ colour: g.part.colorName, rgb: g.part.rgb, type: pieceType(g.part), n: x.need, set: x.set.setNum }))),
     { colour: ui.missingColor, type: ui.missingType },
-    ({ colour, type }) => { ui.missingColor = colour; ui.missingType = type; renderMissing(); window.scrollTo(0, 0); });
+    ({ colour, type, sort, view, hidden: h }) => {
+      ui.missingColor = colour; ui.missingType = type;
+      ui.missingSort = sort; savePref('missingSort', sort);
+      ui.missingView = view; savePref('missingView2', view);
+      savePref('lfHidden', JSON.stringify(h));
+      renderMissing(); window.scrollTo(0, 0);
+    },
+    ['piece', 'pieces'],
+    { sorts: MISSING_SORTS, sort: ui.missingSort, views: MISSING_VIEWS, view: ui.missingView, sets: setList, hidden: lfHidden() });
+  };
+  if ($('#unhideSets')) $('#unhideSets').onclick = () => { savePref('lfHidden', '[]'); rerender(); };
   document.querySelectorAll('[data-clear]').forEach((b) => {
     b.onclick = () => { if (b.dataset.clear === 'colour') ui.missingColor = ''; else ui.missingType = ''; rerender(); };
   });
-  // Found: update the row where it is, without redrawing the list, so nothing
-  // moves under your finger. Finished rows stay (ticked) until you leave the page.
-  document.querySelectorAll('[data-found]').forEach((b) => {
+  // − / +: update the line where it is, without redrawing the list, so nothing
+  // moves under your finger. Finished lines stay (ticked) until you leave the page.
+  document.querySelectorAll('[data-lfc]').forEach((b) => {
     b.onclick = (e) => {
       e.stopPropagation();
-      const key = b.closest('[data-key]').dataset.key;
-      const setNum = b.dataset.found;
-      changeHave(setNum, key, 1, { withUndo: true });
-      const p = state.sets[setNum]?.parts.find((x) => x.key === key);
-      const need = p ? p.qty - p.have : 0;
       const line = b.closest('.lf-set');
-      line.querySelector('.sname b').textContent = need ? `${need}×` : '✓';
-      if (!need) {
-        line.classList.add('done');
-        b.outerHTML = '<span class="badge ok">All found</span>';
-      }
-      const left = missingGroups().reduce((n, g) => n + g.total, 0);
+      const key = b.closest('[data-key]').dataset.key;
+      const setNum = line.dataset.set;
+      changeHave(setNum, key, b.dataset.lfc === 'plus' ? 1 : -1, { withUndo: true });
+      const p = state.sets[setNum]?.parts.find((x) => x.key === key);
+      if (!p) return;
+      line.querySelector('.cnt b').innerHTML = `${p.have}<small>/${p.qty}</small>`;
+      line.classList.toggle('done', p.have >= p.qty);
+      const left = lfGroups().reduce((n, g) => n + g.total, 0);
       if ($('#lfTotal')) $('#lfTotal').textContent = `${left} ${left === 1 ? 'piece' : 'pieces'}`;
     };
   });
   document.querySelectorAll('[data-sheet]').forEach((el) => {
-    el.onclick = (e) => { if (!e.target.closest('[data-found], .badge')) showPartSheet(el.dataset.key); };
+    el.onclick = (e) => { if (!e.target.closest('.cnt')) showPartSheet(el.dataset.key); };
   });
 }
+
+// "− 1/2 +" for one set's piece, on Looking for and in its details panel.
+const lfCounter = (p) => `<span class="cnt"><button data-lfc="minus" aria-label="One less">−</button><b>${p.have}<small>/${p.qty}</small></b><button data-lfc="plus" aria-label="One more">+</button></span>`;
 
 function renderMissingItems(items) {
   if (ui.missingView === 'grid') {
@@ -3613,25 +3638,33 @@ function renderMissingItems(items) {
         <div class="grow">
           <div class="pname">${esc(g.part.name)}</div>
           <div class="meta">${swatch(g.part.rgb)} ${esc(g.part.colorName)} · ${esc(g.part.partNum)}</div>
-          ${sets.map((s) => `
-            <div class="lf-set">
-              <span class="sname"><b>${s.need}×</b> ${esc(s.set.name)} <span class="muted">#${esc(shortSetNum(s.set.setNum))}</span></span>
-              <button class="btn ok small" data-found="${esc(s.set.setNum)}">Found</button>
-            </div>`).join('')}
+          ${sets.map((s) => { const p = s.set.parts.find((x) => x.key === g.key); return `
+            <div class="lf-set" data-set="${esc(s.set.setNum)}">
+              <span class="sname">${esc(s.set.name)} <span class="muted">#${esc(shortSetNum(s.set.setNum))}</span></span>
+              ${lfCounter(p)}
+            </div>`; }).join('')}
         </div>
       </div>`).join('')}</div>`;
 }
 
 // Bottom panel with every colour and type laid out in a grid (no sideways
 // scrolling). `entries` are { colour, rgb, type, n }; counts respect the other choice.
-// extra (optional): { sorts, sort, views, view } adds "Sort by" and "Show as" at the top.
+// The Sort & filter panel. Sections open and close, the Show button stays at
+// the bottom. extra (optional): { sorts, sort, views, view } adds "Sort by" and
+// "Show as"; { sets: [{ setNum, name, img, missing }], hidden: [setNum…] } adds
+// on/off switches per set (entries then carry .set so counts follow them).
+const filterOpen = new Set(['sets', 'colour']);
 function showFilterSheet(entries, current, onApply, unit = ['piece', 'pieces'], extra = null) {
   let colour = current.colour, type = current.type;
   let sort = extra?.sort, view = extra?.view;
+  let hidden = new Set(extra?.hidden || []);
+  let allColours = false;
   const draw = () => {
+    const keepScroll = $('#sheet .panel')?.scrollTop || 0;
     const colours = new Map(), types = new Map();
     let count = 0;
     for (const e of entries) {
+      if (e.set && hidden.has(e.set)) continue;
       if (!type || e.type === type) {
         const c = colours.get(e.colour) || { name: e.colour, rgb: e.rgb, n: 0 };
         c.n += e.n; colours.set(e.colour, c);
@@ -3639,32 +3672,56 @@ function showFilterSheet(entries, current, onApply, unit = ['piece', 'pieces'], 
       if (!colour || e.colour === colour) types.set(e.type, (types.get(e.type) || 0) + e.n);
       if ((!colour || e.colour === colour) && (!type || e.type === type)) count += e.n;
     }
+    const colourList = [...colours.values()].sort((x, y) => y.n - x.n);
+    const shownColours = allColours || colourList.length <= 9 ? colourList
+      : colourList.slice(0, 9).concat(colour && !colourList.slice(0, 9).some((c) => c.name === colour) ? colourList.filter((c) => c.name === colour) : []);
+    const section = (id, title, summary, body) => `
+      <details class="fsec" data-sec="${id}" ${filterOpen.has(id) ? 'open' : ''}>
+        <summary><span class="chev" aria-hidden="true">›</span>${title}<em>${summary}</em></summary>
+        <div class="fsec-body">${body}</div>
+      </details>`;
+    const label = (list, v) => (list.find((x) => x[0] === v) || [])[list[0].length === 3 ? 2 : 1] || '';
     openSheet(`
       <div class="filter-sheet">
-        <div class="row"><h2 class="grow">${extra ? 'Sort &amp; filter' : 'Filter'}</h2><button class="link-btn" id="fClear">Clear ${extra ? 'filters' : 'all'}</button></div>
-        ${extra ? `
-        <h3 class="steps-title">Sort by</h3>
-        <div class="filter-grid">${extra.sorts.map(([v, label]) => `<button class="fchip ${sort === v ? 'on' : ''}" data-fs="${v}"><span>${esc(label)}</span></button>`).join('')}</div>
-        <h3 class="steps-title">Show as</h3>
-        <div class="filter-grid">${extra.views.map(([v, icon, label]) => `<button class="fchip ${view === v ? 'on' : ''}" data-fv="${v}"><span>${icon} ${esc(label)}</span></button>`).join('')}</div>` : ''}
-        <h3 class="steps-title">Colour</h3>
-        <div class="filter-grid">
-          ${[...colours.values()].sort((a, b) => b.n - a.n).map((c) => `
-            <button class="fchip ${colour === c.name ? 'on' : ''}" data-fc="${esc(c.name)}">${swatch(c.rgb)}<span>${esc(c.name)}</span><em>${c.n}</em></button>`).join('')}
+        <div class="row"><h2 class="grow">${extra ? 'Sort &amp; filter' : 'Filter'}</h2><button class="link-btn" id="fClear">Clear all</button></div>
+        ${extra?.sets ? section('sets', 'Sets', hidden.size ? `${hidden.size} hidden` : 'All shown', `
+          <p class="muted small" style="margin:0 0 4px">Switch off a set to hide its pieces here. The set itself doesn't change.</p>
+          ${extra.sets.map((x) => `
+            <button class="fset ${hidden.has(x.setNum) ? 'off' : ''}" data-fset="${esc(x.setNum)}">
+              <span class="thumb">${setPic(x)}</span>
+              <span class="grow"><b>${esc(x.name)}</b><small>#${esc(shortSetNum(x.setNum))} · ${plural(x.missing, 'piece', 'pieces')} missing</small></span>
+              <span class="switch" aria-hidden="true"></span>
+            </button>`).join('')}`) : ''}
+        ${extra?.sorts ? section('sort', 'Sort by', esc(label(extra.sorts, sort)), `
+          <div class="fchips">${extra.sorts.map(([v, l]) => `<button class="fchip ${sort === v ? 'on' : ''}" data-fs="${v}"><span>${esc(l)}</span></button>`).join('')}</div>`) : ''}
+        ${extra?.views ? section('view', 'Show as', esc(label(extra.views, view)), `
+          <div class="fchips">${extra.views.map(([v, icon, l]) => `<button class="fchip ${view === v ? 'on' : ''}" data-fv="${v}"><span>${icon} ${esc(l)}</span></button>`).join('')}</div>`) : ''}
+        ${section('colour', 'Colour', colour ? esc(colour) : 'Any', `
+          <div class="fchips three">${shownColours.map((c) => `
+            <button class="fchip ${colour === c.name ? 'on' : ''}" data-fc="${esc(c.name)}">${swatch(c.rgb)}<span>${esc(c.name)}</span><em>${c.n}</em></button>`).join('')}</div>
+          ${colourList.length > 9 ? `<button class="link-btn fmore" id="fMore">${allColours ? 'Show fewer colours' : `Show all ${colourList.length} colours`}</button>` : ''}`)}
+        ${section('type', 'Type of piece', type ? esc(type) : 'Any', `
+          <div class="fchips">${PIECE_TYPES.filter((t) => types.get(t)).map((t) => `
+            <button class="fchip ${type === t ? 'on' : ''}" data-ft="${esc(t)}"><span>${esc(t)}</span><em>${types.get(t)}</em></button>`).join('')}</div>`)}
+        <div class="filter-foot">
+          <button class="btn" id="fClear2">Clear</button>
+          <button class="btn primary" id="fApply">Show ${count} ${count === 1 ? unit[0] : unit[1]}</button>
         </div>
-        <h3 class="steps-title">Type of piece</h3>
-        <div class="filter-grid">
-          ${PIECE_TYPES.filter((t) => types.get(t)).map((t) => `
-            <button class="fchip ${type === t ? 'on' : ''}" data-ft="${esc(t)}"><span>${esc(t)}</span><em>${types.get(t)}</em></button>`).join('')}
-        </div>
-        <button class="btn primary block" id="fApply">Show ${count} ${count === 1 ? unit[0] : unit[1]}</button>
       </div>`);
+    $('#sheet .panel').scrollTop = keepScroll;
+    document.querySelectorAll('.fsec').forEach((d) => {
+      d.addEventListener('toggle', () => { if (d.open) filterOpen.add(d.dataset.sec); else filterOpen.delete(d.dataset.sec); });
+    });
     document.querySelectorAll('[data-fc]').forEach((b) => { b.onclick = () => { colour = colour === b.dataset.fc ? '' : b.dataset.fc; draw(); }; });
     document.querySelectorAll('[data-ft]').forEach((b) => { b.onclick = () => { type = type === b.dataset.ft ? '' : b.dataset.ft; draw(); }; });
     document.querySelectorAll('[data-fs]').forEach((b) => { b.onclick = () => { sort = b.dataset.fs; draw(); }; });
     document.querySelectorAll('[data-fv]').forEach((b) => { b.onclick = () => { view = b.dataset.fv; draw(); }; });
-    $('#fClear').onclick = () => { colour = ''; type = ''; draw(); };
-    $('#fApply').onclick = () => { closeSheet(); onApply({ colour, type, sort, view }); };
+    document.querySelectorAll('[data-fset]').forEach((b) => {
+      b.onclick = () => { const n = b.dataset.fset; if (hidden.has(n)) hidden.delete(n); else hidden.add(n); draw(); };
+    });
+    if ($('#fMore')) $('#fMore').onclick = () => { allColours = !allColours; draw(); };
+    $('#fClear').onclick = $('#fClear2').onclick = () => { colour = ''; type = ''; hidden = new Set(); draw(); };
+    $('#fApply').onclick = () => { closeSheet(); onApply({ colour, type, sort, view, hidden: [...hidden] }); };
   };
   draw();
 }
@@ -3695,7 +3752,7 @@ function activeFilterTags(colour, rgb, type, label) {
 }
 
 function showPartSheet(key) {
-  const g = missingGroups().find((x) => x.key === key);
+  const g = lfGroups().find((x) => x.key === key);
   if (!g) { closeSheet(); return; }
   const p = g.part;
   openSheet(`
@@ -3703,25 +3760,36 @@ function showPartSheet(key) {
     <div class="big-pic">${partImg(p)}</div>
     <h2 style="margin-top:12px">${esc(p.name)}</h2>
     <div class="meta muted">${swatch(p.rgb)} ${esc(p.colorName)} · part #${esc(p.partNum)}</div>
-    <p><span class="badge miss">need ${g.total}</span></p>
+    <p><span class="badge miss" id="sheetNeed">need ${g.total}</span></p>
     <h3 class="steps-title">Needed for</h3>
     ${g.sets.map((s) => `
-      <div class="for-set">
+      <div class="for-set lf-set" data-set="${esc(s.set.setNum)}">
         <span class="thumb">${setPic(s.set)}</span>
-        <span class="sname"><b>${esc(s.set.name)}</b><br><span class="muted small">#${esc(shortSetNum(s.set.setNum))} · need ${s.need}</span></span>
-        <button class="btn ok small" data-sheet-found="${esc(s.set.setNum)}">Found</button>
+        <span class="sname"><b>${esc(s.set.name)}</b><br><span class="muted small">#${esc(shortSetNum(s.set.setNum))}</span></span>
+        ${lfCounter(s.set.parts.find((x) => x.key === key))}
       </div>`).join('')}
     <p class="small"><a href="https://rebrickable.com/parts/${encodeURIComponent(p.partNum)}/" target="_blank" rel="noopener">More pictures on Rebrickable ↗</a></p>
     <button class="btn block" data-close>Close</button>`);
-  document.querySelectorAll('[data-sheet-found]').forEach((b) => {
+  // The panel stays open with its numbers updated; the list behind catches up when it closes.
+  document.querySelectorAll('#sheet [data-lfc]').forEach((b) => {
     b.onclick = () => {
-      changeHave(b.dataset.sheetFound, key, 1, { withUndo: true });
-      // Keep the panel open with the new numbers; the list behind catches up.
-      const y = window.scrollY;
-      renderMissing();
-      window.scrollTo(0, y);
-      if (missingGroups().some((x) => x.key === key)) showPartSheet(key);
-      else { closeSheet(); toast(`✅ ${p.name} (${p.colorName}): all found`, true); }
+      const line = b.closest('.lf-set');
+      changeHave(line.dataset.set, key, b.dataset.lfc === 'plus' ? 1 : -1, { withUndo: true });
+      const q = state.sets[line.dataset.set]?.parts.find((x) => x.key === key);
+      if (!q) return;
+      line.querySelector('.cnt b').innerHTML = `${q.have}<small>/${q.qty}</small>`;
+      line.classList.toggle('done', q.have >= q.qty);
+      const left = g.sets.reduce((t, x) => { const r = x.set.parts.find((y) => y.key === key); return t + (r ? r.qty - r.have : 0); }, 0);
+      $('#sheetNeed').textContent = left ? `need ${left}` : 'all found ✓';
+      $('#sheetNeed').className = left ? 'badge miss' : 'badge ok';
+      // Update the same piece in the list behind, in place (nothing moves).
+      const row = document.querySelector(`#view [data-key="${CSS.escape(key)}"]`);
+      const rowLine = row && row.querySelector(`.lf-set[data-set="${CSS.escape(line.dataset.set)}"]`);
+      if (rowLine) { rowLine.querySelector('.cnt b').innerHTML = `${q.have}<small>/${q.qty}</small>`; rowLine.classList.toggle('done', q.have >= q.qty); }
+      const tag = row && row.querySelector('.need-tag');
+      if (tag) tag.textContent = left ? `×${left}` : '✓';
+      const total = lfGroups().reduce((n, x) => n + x.total, 0);
+      if ($('#lfTotal')) $('#lfTotal').textContent = `${total} ${total === 1 ? 'piece' : 'pieces'}`;
     };
   });
 }

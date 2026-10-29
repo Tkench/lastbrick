@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.8.1';
 const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -3538,7 +3538,7 @@ function renderMissing() {
 
   let html = `
     <section class="lf-head">
-      <h2 class="lf-title">${totalPieces} ${totalPieces === 1 ? 'piece' : 'pieces'} to find<br><span class="accent">across ${across}</span></h2>
+      <h2 class="lf-title"><span id="lfTotal">${totalPieces} ${totalPieces === 1 ? 'piece' : 'pieces'}</span> to find<br><span class="accent">across ${across}</span></h2>
     </section>
     <div class="sets-toolbar lf-toolbar">
       <label class="sort-select">
@@ -3574,15 +3574,28 @@ function renderMissing() {
   document.querySelectorAll('[data-clear]').forEach((b) => {
     b.onclick = () => { if (b.dataset.clear === 'colour') ui.missingColor = ''; else ui.missingType = ''; rerender(); };
   });
+  // Found: update the row where it is, without redrawing the list, so nothing
+  // moves under your finger. Finished rows stay (ticked) until you leave the page.
   document.querySelectorAll('[data-found]').forEach((b) => {
     b.onclick = (e) => {
       e.stopPropagation();
-      changeHave(b.dataset.found, b.closest('[data-key]').dataset.key, 1, { withUndo: true });
-      rerender();
+      const key = b.closest('[data-key]').dataset.key;
+      const setNum = b.dataset.found;
+      changeHave(setNum, key, 1, { withUndo: true });
+      const p = state.sets[setNum]?.parts.find((x) => x.key === key);
+      const need = p ? p.qty - p.have : 0;
+      const line = b.closest('.lf-set');
+      line.querySelector('.sname b').textContent = need ? `${need}×` : '✓';
+      if (!need) {
+        line.classList.add('done');
+        b.outerHTML = '<span class="badge ok">All found</span>';
+      }
+      const left = missingGroups().reduce((n, g) => n + g.total, 0);
+      if ($('#lfTotal')) $('#lfTotal').textContent = `${left} ${left === 1 ? 'piece' : 'pieces'}`;
     };
   });
   document.querySelectorAll('[data-sheet]').forEach((el) => {
-    el.onclick = (e) => { if (!e.target.closest('[data-found]')) showPartSheet(el.dataset.key); };
+    el.onclick = (e) => { if (!e.target.closest('[data-found], .badge')) showPartSheet(el.dataset.key); };
   });
 }
 
@@ -3595,8 +3608,8 @@ function renderMissingItems(items) {
         </div>`).join('')}</div>`;
   }
   return `<div class="part-list">${items.map(({ g, sets }) => `
-      <div class="prow lf-row missing" data-key="${esc(g.key)}">
-        <div class="prow-pic" data-sheet data-key="${esc(g.key)}">${partImg(g.part)}</div>
+      <div class="prow lf-row missing" data-key="${esc(g.key)}" data-sheet>
+        <div class="prow-pic">${partImg(g.part)}</div>
         <div class="grow">
           <div class="pname">${esc(g.part.name)}</div>
           <div class="meta">${swatch(g.part.rgb)} ${esc(g.part.colorName)} · ${esc(g.part.partNum)}</div>
@@ -3683,16 +3696,19 @@ function activeFilterTags(colour, rgb, type, label) {
 
 function showPartSheet(key) {
   const g = missingGroups().find((x) => x.key === key);
-  if (!g) return;
+  if (!g) { closeSheet(); return; }
   const p = g.part;
   openSheet(`
+    <button class="sheet-x" data-close aria-label="Close">✕</button>
     <div class="big-pic">${partImg(p)}</div>
     <h2 style="margin-top:12px">${esc(p.name)}</h2>
     <div class="meta muted">${swatch(p.rgb)} ${esc(p.colorName)} · part #${esc(p.partNum)}</div>
     <p><span class="badge miss">need ${g.total}</span></p>
+    <h3 class="steps-title">Needed for</h3>
     ${g.sets.map((s) => `
       <div class="for-set">
-        <span class="sname">${s.need}× for <b>${esc(s.set.name)}</b> <span class="muted">#${esc(shortSetNum(s.set.setNum))}</span></span>
+        <span class="thumb">${setPic(s.set)}</span>
+        <span class="sname"><b>${esc(s.set.name)}</b><br><span class="muted small">#${esc(shortSetNum(s.set.setNum))} · need ${s.need}</span></span>
         <button class="btn ok small" data-sheet-found="${esc(s.set.setNum)}">Found</button>
       </div>`).join('')}
     <p class="small"><a href="https://rebrickable.com/parts/${encodeURIComponent(p.partNum)}/" target="_blank" rel="noopener">More pictures on Rebrickable ↗</a></p>
@@ -3700,10 +3716,12 @@ function showPartSheet(key) {
   document.querySelectorAll('[data-sheet-found]').forEach((b) => {
     b.onclick = () => {
       changeHave(b.dataset.sheetFound, key, 1, { withUndo: true });
-      closeSheet();
+      // Keep the panel open with the new numbers; the list behind catches up.
       const y = window.scrollY;
       renderMissing();
       window.scrollTo(0, y);
+      if (missingGroups().some((x) => x.key === key)) showPartSheet(key);
+      else { closeSheet(); toast(`✅ ${p.name} (${p.colorName}): all found`, true); }
     };
   });
 }

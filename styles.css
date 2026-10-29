@@ -1004,3 +1004,7 @@ body.welcome .topbar {
 .filter-foot .btn { flex: 1; }
 .filter-foot .btn.primary { flex: 2; }
 .filter-foot .btn.primary { margin-top: 0; } .filter-sheet { padding-bottom: 0; }
+.funnel-extra { display: grid; gap: 6px; margin-bottom: 10px; font-size: 14px; }
+.funnel-extra div { display: flex; align-items: baseline; gap: 8px; }
+.funnel-extra b { min-width: 28px; text-align: right; font-size: 16px; }
+.funnel-extra i { font-style: normal; font-weight: 600; }

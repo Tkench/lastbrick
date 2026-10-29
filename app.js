@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.9.1';
 const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -1196,14 +1196,20 @@ function renderWelcome() {
       <p>LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.</p>
     </footer>`;
   bindSwipeCards('steps');
-  $('#howBtn').onclick = () => $('#how').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('#howBtn').onclick = () => { funnelStep('how'); $('#how').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  // Counts people who scroll down to "How it works" too, not just those who tap the arrow.
+  if ('IntersectionObserver' in window) {
+    const seen = new IntersectionObserver((list) => { if (list.some((x) => x.isIntersecting)) { funnelStep('how'); seen.disconnect(); } }, { threshold: 0.4 });
+    seen.observe($('#how'));
+  }
   if ($('#tryNow')) $('#tryNow').onclick = () => $('#startFig').click();
   if ($('#tryNowSet')) $('#tryNowSet').onclick = () => $('#startBtn').click();
   if ($('#startBtn')) {
-    $('#startBtn').onclick = () => { funnelStep('start'); state.welcomed = true; save(); go('#add'); render(); };
+    $('#startBtn').onclick = () => { funnelStep('start'); funnelStep('tap_set'); state.welcomed = true; save(); go('#add'); render(); };
     // Straight to the camera: the Add a minifigure page shows the answer.
     $('#startFig').onclick = () => {
       funnelStep('start');
+      funnelStep('tap_fig');
       state.welcomed = true; save();
       ui.collection = 'figs'; savePref('collection', 'figs');
       resetFigAdd();
@@ -4197,7 +4203,15 @@ function renderFunnel(f, range) {
         ${i === worst ? `<div class="small funnel-note">⬆ Biggest drop: ${fmtNum(worstLoss)} ${worstLoss === 1 ? 'person' : 'people'} stopped here</div>` : ''}
       </div>`).join('')
       : '<p class="muted small">No new visitors counted yet. Steps are counted from when this was switched on, for people new to Last Brick.</p>'}
-    ${counts.scan || counts.demo ? `<p class="muted small">${[counts.demo ? `${fmtNum(counts.demo)} opened the example set` : '', counts.scan ? `${fmtNum(counts.scan)} tried scanning a piece or figure` : ''].filter(Boolean).join(' · ')}.</p>` : ''}
+    ${counts.tap_fig || counts.tap_set || counts.how || counts.demo || counts.scan ? `
+      <h3 class="steps-title">On the welcome screen</h3>
+      <div class="funnel-extra">
+        <div><b>${fmtNum(counts.tap_fig || 0)}</b>tapped <i>Who's this minifigure?</i></div>
+        <div><b>${fmtNum(counts.tap_set || 0)}</b>tapped <i>Rebuild a set</i></div>
+        <div><b>${fmtNum(counts.how || 0)}</b>looked at <i>How it works</i></div>
+        <div><b>${fmtNum(counts.demo || 0)}</b>opened the example set</div>
+        <div><b>${fmtNum(counts.scan || 0)}</b>tried scanning</div>
+      </div>` : ''}
     ${(f.bySource || []).length ? `
       <h3 class="steps-title">By link <span class="muted">(last 7 days)</span></h3>
       <div class="funnel-src"><span></span><b>Visited</b><b>Added</b><b>Registered</b>
@@ -4633,8 +4647,9 @@ async function renderDemo() {
       const y = window.scrollY; renderDemo(); window.scrollTo(0, y);
     };
   });
-  $('#demoAdd').onclick = () => { state.welcomed = true; save(); go('#add'); };
+  $('#demoAdd').onclick = () => { funnelStep('tap_set'); state.welcomed = true; save(); go('#add'); };
   $('#demoFig').onclick = () => {
+    funnelStep('tap_fig');
     state.welcomed = true; save();
     ui.collection = 'figs'; savePref('collection', 'figs');
     resetFigAdd(); figAdd.scanKind = 'fig';

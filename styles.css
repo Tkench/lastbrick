@@ -921,3 +921,26 @@ body.welcome .topbar {
 @media (max-height: 760px) { .big-choice { padding: 12px 14px; margin-bottom: 12px; } .big-choice .choice-ico { width: 60px; height: 60px; } .welcome-facts b { font-size: 16px; } .welcome-facts { font-size: 11px; } }
 .welcome-hero .hero-title { text-wrap: balance; }
 @media (max-width: 370px) { .big-choice { padding-top: 14px; padding-bottom: 14px; margin-bottom: 14px; } .welcome-hero { padding-top: 10px; } .welcome-hero .hero-sub { margin-bottom: 18px; } }
+
+/* "No LEGO to hand? See an example" */
+.demo-link { margin: 6px 0 0; }
+.demo-link a { font-weight: 700; }
+.welcome-first .demo-link + .hero-login { margin-top: 4px; }
+.demo-banner { background: #fff8db; border: 2px solid #ffd43b; border-radius: 14px; padding: 10px 12px; margin-bottom: 12px; color: #1b1b1f; font-size: 14px; line-height: 1.4; }
+.demo-banner > b { display: block; font-size: 16px; }
+.demo-cta { position: sticky; bottom: calc(76px + env(safe-area-inset-bottom)); display: grid; gap: 8px; margin-top: 16px; padding: 10px; background: var(--bg); border-radius: 16px; box-shadow: 0 -4px 14px rgba(0,0,0,.08); }
+.demo-cta .btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
+/* A figure's set: "Got Clone Turbo Tank? See which pieces you're missing" */
+.set-nudge { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; margin: 12px 0 4px; padding: 12px; border: 2px solid var(--brand); border-radius: 14px; background: #fdecec; color: #1b1b1f; font: inherit; cursor: pointer; }
+.set-nudge .thumb { flex: none; width: 56px; height: 56px; background: #fff; border-radius: 10px; display: grid; place-items: center; overflow: hidden; }
+.set-nudge .thumb img { max-width: 90%; max-height: 90%; object-fit: contain; }
+.set-nudge b { display: block; }
+.set-nudge small { display: block; color: #6b6b76; font-size: 13px; }
+.set-nudge .chev { margin-left: auto; color: var(--brand); font-size: 24px; font-weight: 800; }
+@media (max-width: 370px) {
+  .welcome-hero .hero-sub { margin-bottom: 14px; }
+  .big-choice { margin-bottom: 11px; padding-top: 12px; padding-bottom: 12px; }
+  .welcome-facts b { font-size: 16px; }
+  .welcome-facts { font-size: 11px; }
+  .demo-link, .welcome-first .hero-login { margin-top: 2px; }
+}

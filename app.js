@@ -22,8 +22,8 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.7.1';
-const APP_DATE = '2026-10-29';
+const APP_VERSION = '1.8.0';
+const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
 // Cloudflare Web Analytics (cookie-free visitor stats). Paste the site's token here
@@ -986,14 +986,14 @@ window.addEventListener('hashchange', () => { closeSheet(); render(); window.scr
 
 function render() {
   const r = route();
-  const sub = r.name === 'set' || r.name === 'add' || r.name === 'addfig' || r.name === 'stats' || r.name === 'help';
+  const sub = r.name === 'set' || r.name === 'add' || r.name === 'addfig' || r.name === 'stats' || r.name === 'help' || r.name === 'demo';
   const tab = r.name === 'stats' || r.name === 'help' ? 'settings' : sub ? 'sets' : r.name;
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   const back = $('#backBtn');
   back.classList.toggle('hidden', !sub);
   $('#delBtn').classList.add('hidden'); // renderSet shows it for the open set
 
-  if (r.name !== 'settings' && r.name !== 'help' && (needsOwnKey() || (!state.welcomed && !Object.keys(state.sets).length))) return renderWelcome();
+  if (r.name !== 'settings' && r.name !== 'help' && r.name !== 'demo' && (needsOwnKey() || (!state.welcomed && !Object.keys(state.sets).length))) return renderWelcome();
 
   if (r.name === 'add' || r.name === 'addfig' || r.name === 'scan') funnelStep('start');
   switch (r.name) {
@@ -1005,6 +1005,7 @@ function render() {
     case 'settings': return renderSettings();
     case 'stats': return renderStats();
     case 'help': return renderHelp();
+    case 'demo': return renderDemo();
     default: return renderSets();
   }
 }
@@ -1181,6 +1182,7 @@ function renderWelcome() {
       <div><b>Almost every</b>LEGO® set</div>
       <div><b>Free</b>no sign-up</div>
     </div>`}
+    <p class="center small demo-link">No LEGO to hand? <a href="#demo">See an example</a></p>
     ${syncEnabled() ? `<p class="center small hero-login">Already have an account? <a href="#settings">Log in</a></p>` : ''}
     <button class="scroll-hint" id="howBtn">How it works <span class="scroll-arrow" aria-hidden="true">↓</span></button>
     </div>
@@ -1656,6 +1658,9 @@ function renderAdd() {
   };
   $('#fetchBtn').onclick = submit;
   input.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+  // "#add/8098-1" (from a minifigure's "Got that set?"): fill in the number and look it up.
+  const given = route().arg;
+  if (given) { input.value = shortSetNum(given); submit(); }
   // Typing a different number puts the Find set button back.
   input.oninput = () => {
     if (!$('#addStatus').innerHTML) return;
@@ -3020,6 +3025,16 @@ async function showFigPreview(figNum, picture = '', { forPlain = '' } = {}) {
         </div>`).join('')}</div>
       <h3 class="steps-title">${fig.inSets.length ? `Comes in ${plural(fig.inSets.length, 'set', 'sets')}` : 'Not part of a set'}</h3>
       ${figSetRows(fig, 3, false)}
+      ${(() => {
+        // The first win leads on: "Got the set it came from? See what's missing."
+        const home = fig.inSets.find((x) => (!fig.pack || x.setNum !== fig.pack.setNum) && !state.sets[x.setNum]);
+        return home && !forPlain ? `
+        <button class="set-nudge" id="figSetNudge">
+          <span class="thumb">${home.img ? `<img src="${esc(home.img)}" alt="" loading="lazy">` : '🧱'}</span>
+          <span class="grow"><b>Got ${esc(home.name)}?</b><small>See which pieces you're missing to rebuild it</small></span>
+          <span class="chev" aria-hidden="true">›</span>
+        </button>` : '';
+      })()}
       <p></p>
       ${forPlain
         ? `<button class="btn primary block" id="figChoose">This is the one</button><p></p><button class="btn block" id="figBackToVersions">‹ Back to versions</button>`
@@ -3040,6 +3055,10 @@ async function showFigPreview(figNum, picture = '', { forPlain = '' } = {}) {
   }
   const open = () => { ui.collection = 'figs'; savePref('collection', 'figs'); ui.setFilter = 'missing'; go('#set/' + encodeURIComponent(fig.setNum)); };
   if ($('#figOpen')) $('#figOpen').onclick = open;
+  if ($('#figSetNudge')) {
+    const home = fig.inSets.find((x) => (!fig.pack || x.setNum !== fig.pack.setNum) && !state.sets[x.setNum]);
+    $('#figSetNudge').onclick = () => { closeSheet(); state.welcomed = true; save(); go('#add/' + encodeURIComponent(home.setNum)); };
+  }
   if ($('#figChoose')) $('#figChoose').onclick = () => chooseVersion(forPlain, figNum, $('#figChoose'));
   if ($('#figBackToVersions')) $('#figBackToVersions').onclick = () => showVersionPicker(forPlain);
   if ($('#figAnother')) {
@@ -4468,6 +4487,72 @@ function renderAccountCard() {
         foot: "Can't find it? Check your spam folder.",
       });
     } catch (err) { toast(err.message); }
+  };
+}
+
+/* ---------- Example set ("No LEGO to hand? See an example") ----------
+ * A real set's parts list, mostly ticked, that you can play with. Nothing is
+ * saved and no account is needed. */
+const DEMO_SET = '6080-1'; // King's Castle (1988)
+let demo = null;
+async function renderDemo() {
+  setTitle('Example set');
+  if (!demo) {
+    $('#view').innerHTML = '<div class="spinner"></div><p class="center muted">Loading an example set…</p>';
+    try {
+      const set = await fetchSet(DEMO_SET);
+      // Mostly found, with a few pieces still missing, like a real box.
+      set.parts.forEach((p, i) => { p.have = i % 7 === 3 ? Math.max(0, p.qty - Math.max(1, Math.ceil(p.qty / 2))) : p.qty; });
+      demo = set;
+    } catch (e) {
+      $('#view').innerHTML = `<div class="empty">${emptyBrick()}<b>Couldn't load the example</b><br>${esc(e.message)}</div>`;
+      return;
+    }
+    if (route().name !== 'demo') return;
+  }
+  const st = setStats(demo);
+  const missing = demo.parts.filter((p) => p.have < p.qty);
+  const view = ui.partView;
+  ui.partView = 'grid';
+  const grid = renderPartItems(missing);
+  ui.partView = view;
+  $('#view').innerHTML = `
+    <div class="demo-banner">
+      <b>This is an example</b>
+      <span>Here's how a set looks in Last Brick. Tap <b>+</b> when you find a piece. Nothing here is saved.</span>
+    </div>
+    <div class="card set-card" style="cursor:default">
+      ${demo.img ? `<img src="${esc(demo.img)}" alt="">` : ''}
+      <div class="grow">
+        <div class="name">${esc(demo.name)}</div>
+        <div class="muted small">#${esc(shortSetNum(demo.setNum))} · ${esc(demo.year)} · ${st.kinds} different parts</div>
+        <div class="progress"><div style="width:${Math.round(st.have / st.need * 100)}%"></div></div>
+        <div style="margin-top:6px">${st.missing ? `<span class="badge miss">${st.missing} pieces missing</span>` : '<span class="badge ok">Complete ✓</span>'} <span class="muted small">${st.have} / ${st.need}</span></div>
+      </div>
+    </div>
+    <h3 class="steps-title">Still missing</h3>
+    ${missing.length ? grid : `<div class="empty"><div class="big">🎉</div>You found everything! That's how it feels.</div>`}
+    <div class="demo-cta">
+      <button class="btn primary block" id="demoAdd">Add my own set</button>
+      <button class="btn block" id="demoFig">${scanFigIcon('scan-ico btn-ico')} Who's this minifigure?</button>
+    </div>`;
+  $('#view').querySelectorAll('.pitem').forEach((el) => {
+    el.onclick = (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      const p = demo.parts.find((x) => x.key === el.dataset.key);
+      if (!p || (act !== 'plus' && act !== 'minus')) return;
+      p.have = Math.max(0, Math.min(p.qty, p.have + (act === 'plus' ? 1 : -1)));
+      buzz();
+      const y = window.scrollY; renderDemo(); window.scrollTo(0, y);
+    };
+  });
+  $('#demoAdd').onclick = () => { state.welcomed = true; save(); go('#add'); };
+  $('#demoFig').onclick = () => {
+    state.welcomed = true; save();
+    ui.collection = 'figs'; savePref('collection', 'figs');
+    resetFigAdd(); figAdd.scanKind = 'fig';
+    go('#addfig');
+    $('#figCameraInput').click();
   };
 }
 

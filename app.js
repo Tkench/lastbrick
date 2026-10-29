@@ -1166,7 +1166,7 @@ function renderWelcome() {
       <button class="btn primary block" id="saveKey">Save and start</button>
     </div>` : `
     <button class="big-choice red" id="startFig">
-      <span class="choice-tag">TRY THIS FIRST</span>
+      <span class="choice-tag">TRY IT NOW</span>
       <span class="choice-ico">${scanFigIcon('')}</span>
       <span class="choice-text"><b>Who's this minifigure?</b><small>Snap it and find out who it is</small></span>
       <span class="choice-go" aria-hidden="true">›</span>

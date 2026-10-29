@@ -28,9 +28,13 @@ create policy "Anyone can count a visit" on public.visits
 create table if not exists public.funnel (
   id bigint generated always as identity primary key,
   day date not null default current_date,
-  step text not null check (step in ('visit', 'start', 'scan', 'first_item', 'gate', 'register_start', 'registered', 'confirmed')),
+  step text not null,
   source text check (length(source) <= 60)
 );
+-- The steps that can be counted (updated when a new one is added, e.g. 'demo').
+alter table public.funnel drop constraint if exists funnel_step_check;
+alter table public.funnel add constraint funnel_step_check
+  check (step in ('visit', 'start', 'scan', 'demo', 'first_item', 'gate', 'register_start', 'registered', 'confirmed'));
 alter table public.funnel enable row level security;
 
 drop policy if exists "Anyone can count a step" on public.funnel;

@@ -4111,7 +4111,7 @@ function renderFunnel(f, range) {
         ${i === worst ? `<div class="small funnel-note">⬆ Biggest drop: ${fmtNum(worstLoss)} ${worstLoss === 1 ? 'person' : 'people'} stopped here</div>` : ''}
       </div>`).join('')
       : '<p class="muted small">No new visitors counted yet. Steps are counted from when this was switched on, for people new to Last Brick.</p>'}
-    ${counts.scan ? `<p class="muted small">${fmtNum(counts.scan)} tried scanning a piece or figure.</p>` : ''}
+    ${counts.scan || counts.demo ? `<p class="muted small">${[counts.demo ? `${fmtNum(counts.demo)} opened the example set` : '', counts.scan ? `${fmtNum(counts.scan)} tried scanning a piece or figure` : ''].filter(Boolean).join(' · ')}.</p>` : ''}
     ${(f.bySource || []).length ? `
       <h3 class="steps-title">By link <span class="muted">(last 7 days)</span></h3>
       <div class="funnel-src"><span></span><b>Visited</b><b>Added</b><b>Registered</b>
@@ -4510,6 +4510,7 @@ async function renderDemo() {
     }
     if (route().name !== 'demo') return;
   }
+  funnelStep('demo');
   const st = setStats(demo);
   const missing = demo.parts.filter((p) => p.have < p.qty);
   const view = ui.partView;

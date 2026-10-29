@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.9.1';
+const APP_VERSION = '1.9.2';
 const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -2674,6 +2674,7 @@ function renderFigOutInner() {
     const list = q ? linked.filter((f) => f.name.toLowerCase().includes(q) || f.set_num.includes(q)) : linked;
     const nLinked = linked.filter((f) => f.link).length;
     h += `<h3 class="steps-title">${esc(a.resultsTitle)}</h3>`;
+    if (a.autoPicked && a.guesses && a.guesses.length > 1) h += `<p class="small not-right"><button class="link-btn" data-back="guesses">Not right? See the scanner's other guesses</button></p>`;
     if (a.resultsSub) h += `<p class="muted small">${esc(a.resultsSub)}</p>`;
     if (a.resultsHint) h += `<div class="verdict-card ${a.results.length > 12 ? 'no' : 'yes'}"><span class="verdict-ico">${a.results.length > 12 ? '💡' : '✅'}</span><div><b>${esc(a.resultsHint[0])}</b><span>${esc(a.resultsHint[1])}</span></div></div>`;
     if (a.torsoTip) {
@@ -2779,6 +2780,42 @@ function noFigs(title, text) {
   Object.assign(figAdd, { error: text, errorTitle: title, errorIcon: '🤔' });
 }
 
+// Turns one of the scanner's guesses for a whole figure into Rebrickable's figures.
+async function figFromGuess(g) {
+  // If the scanner links to the figure on Rebrickable, that's an exact match.
+  const rbLink = (g.external_sites || []).map((x) => /rebrickable\.com\/minifigs\/(fig-\d+)/i.exec(x.url || '')).find(Boolean);
+  if (rbLink) { figAdd.step = 'guesses'; showFigPreview(rbLink[1].toLowerCase(), g.img_url); return; }
+  // The scanner names figures the BrickLink way, so match by words against
+  // Rebrickable's names, plus whatever Rebrickable's own search finds.
+  let found = [];
+  try { found = (await helperGet(`figfind=${encodeURIComponent(g.id)}&name=${encodeURIComponent(g.name)}`)).results || []; } catch { /* use the name match */ }
+  // Rebrickable's search matches parts of words ("Trucker" finds "Strucker"),
+  // so keep only its results that share whole words with the scanner's name.
+  const allFigs = await figIndexFile('figs.json');
+  const want = allFigs ? scannerWords(g.name, rarityOf(allFigs)) : nameWords(g.name).map((w) => ({ w: canon(w), weight: 1 }));
+  found = found.filter((f) => f.exact || nameScore(want, f.name) > 0);
+  const seen = new Set(found.map((f) => f.set_num));
+  const byName = (await figsByName(g.name)).filter((f) => !seen.has(f.set_num));
+  // A figure found through its own packet is only a sure match when the scanner
+  // says it's a collectable minifigure (BrickLink numbers those "col…"): the
+  // same name can also be a figure from an ordinary set (e.g. "Ice Fisherman").
+  const collectable = /^col/i.test(g.id);
+  const ranked = (list) => list.sort((a, b) => nameScore(want, b.name) - nameScore(want, a.name) || a.name.length - b.name.length);
+  const results = collectable
+    ? [...found.filter((f) => f.exact), ...ranked([...found.filter((f) => !f.exact), ...byName])]
+    : ranked([...found, ...byName]);
+  if (!results.length) return noFigs("Couldn't find that figure", 'Try another match, or scan one of its pieces instead (a printed torso works best).');
+  const sure = collectable ? found.filter((f) => f.exact) : [];
+  const pick = sure.length === 1 ? sure[0] : null;
+  if (pick) { figAdd.step = 'guesses'; showFigPreview(pick.set_num, pick.set_img_url || g.img_url); return; }
+  Object.assign(figAdd, {
+    step: 'results', results, back: 'guesses', filter: '', torsoTip: true,
+    resultsTitle: 'Which one is yours?',
+    resultsHint: null,
+    resultsSub: `Closest matches for “${g.name.replace(/\s*\([^)]*\)/g, '')}”. Tap the one that looks like yours.`,
+  });
+}
+
 function bindAddFig() {
   document.querySelectorAll('[data-report-fig]').forEach((b) => {
     b.onclick = () => showReportSheet({
@@ -2795,40 +2832,7 @@ function bindAddFig() {
     b.onclick = () => {
       const g = figAdd.guesses[Number(b.dataset.guess)];
       if (figAdd.scanKind === 'fig') {
-        figStep('Finding this figure…', async () => {
-          // If the scanner links to the figure on Rebrickable, that's an exact match.
-          const rbLink = (g.external_sites || []).map((x) => /rebrickable\.com\/minifigs\/(fig-\d+)/i.exec(x.url || '')).find(Boolean);
-          if (rbLink) { figAdd.step = 'guesses'; showFigPreview(rbLink[1].toLowerCase(), g.img_url); return; }
-          // The scanner names figures the BrickLink way, so match by words against
-          // Rebrickable's names, plus whatever Rebrickable's own search finds.
-          let found = [];
-          try { found = (await helperGet(`figfind=${encodeURIComponent(g.id)}&name=${encodeURIComponent(g.name)}`)).results || []; } catch { /* use the name match */ }
-          // Rebrickable's search matches parts of words ("Trucker" finds "Strucker"),
-          // so keep only its results that share whole words with the scanner's name.
-          const allFigs = await figIndexFile('figs.json');
-          const want = allFigs ? scannerWords(g.name, rarityOf(allFigs)) : nameWords(g.name).map((w) => ({ w: canon(w), weight: 1 }));
-          found = found.filter((f) => f.exact || nameScore(want, f.name) > 0);
-          const seen = new Set(found.map((f) => f.set_num));
-          const byName = (await figsByName(g.name)).filter((f) => !seen.has(f.set_num));
-          // A figure found through its own packet is only a sure match when the scanner
-          // says it's a collectable minifigure (BrickLink numbers those "col…"): the
-          // same name can also be a figure from an ordinary set (e.g. "Ice Fisherman").
-          const collectable = /^col/i.test(g.id);
-          const ranked = (list) => list.sort((a, b) => nameScore(want, b.name) - nameScore(want, a.name) || a.name.length - b.name.length);
-          const results = collectable
-            ? [...found.filter((f) => f.exact), ...ranked([...found.filter((f) => !f.exact), ...byName])]
-            : ranked([...found, ...byName]);
-          if (!results.length) return noFigs("Couldn't find that figure", 'Try another match, or scan one of its pieces instead (a printed torso works best).');
-          const sure = collectable ? found.filter((f) => f.exact) : [];
-          const pick = sure.length === 1 ? sure[0] : null;
-          if (pick) { figAdd.step = 'guesses'; showFigPreview(pick.set_num, pick.set_img_url || g.img_url); return; }
-          Object.assign(figAdd, {
-            step: 'results', results, back: 'guesses', filter: '', torsoTip: true,
-            resultsTitle: 'Which one is yours?',
-            resultsHint: null,
-            resultsSub: `Closest matches for “${g.name.replace(/\s*\([^)]*\)/g, '')}”. Tap the one that looks like yours.`,
-          });
-        });
+        figStep('Finding this figure…', () => figFromGuess(g));
         return;
       }
       figStep('Looking up this piece…', async () => {
@@ -3105,7 +3109,13 @@ $('#figCameraInput').addEventListener('change', async (e) => {
     await zoomPhoto(figAdd, found.box);
     const items = found.items.slice(0, 4);
     if (!items.length) return noFigs(`Couldn't recognise that ${kind === 'fig' ? 'figure' : 'piece'}`, 'Try again closer up, on a plain background, or search by name.');
-    Object.assign(figAdd, { step: 'guesses', guesses: items });
+    Object.assign(figAdd, { step: 'guesses', guesses: items, autoPicked: false });
+    // A confident whole-figure guess goes straight to the matches (one list, not two).
+    const [top, next] = items;
+    if (kind === 'fig' && (top.score || 0) >= 0.8 && (!next || (top.score || 0) - (next.score || 0) >= 0.15)) {
+      figAdd.autoPicked = true;
+      await figFromGuess(top);
+    }
   });
 });
 

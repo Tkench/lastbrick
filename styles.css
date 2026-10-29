@@ -951,3 +951,4 @@ body.welcome .topbar {
 .welcome-hero .hero-sub { margin-bottom: 18px; }
 @media (min-height: 761px) and (max-height: 900px) { .welcome-hero { padding-top: 10px; } .welcome-hero .hero-sub { margin-bottom: 18px; } }
 @media (max-height: 760px) { .welcome-hero { padding-top: 6px; } .welcome-hero .hero-sub { margin-bottom: 14px; } }
+.welcome-hero .hero-title .accent { font-size: .84em; }

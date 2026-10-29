@@ -845,3 +845,4 @@ body.welcome .topbar {
 .funnel-src b { font-size: 12px; color: var(--muted); text-align: right; }
 .funnel-src em { font-style: normal; text-align: right; font-weight: 700; }
 .funnel-src span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src-row.sub { margin-left: 16px; } .src-row.sub .src-top span:first-child { color: var(--muted); } .src-row.sub .src-bar span { opacity: .55; }

@@ -22,8 +22,8 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.6.0';
-const APP_DATE = '2026-10-28';
+const APP_VERSION = '1.6.1';
+const APP_DATE = '2026-10-29';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
 // Cloudflare Web Analytics (cookie-free visitor stats). Paste the site's token here
@@ -3927,9 +3927,14 @@ const reportLink = (id, text = 'Wrong match? Tell us') => `<p class="center repo
 const VISIT_SOURCE = (() => {
   try {
     const url = new URL(location.href);
-    const tag = (url.searchParams.get('ref') || url.searchParams.get('utm_source') || '').toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 40);
-    if (url.searchParams.has('ref') || url.searchParams.has('utm_source')) {
-      ['ref', 'utm_source', 'utm_medium', 'utm_campaign'].forEach((k) => url.searchParams.delete(k));
+    const clean = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 28);
+    // "?utm_source=facebook&utm_content=group3" is saved as "facebook/group3", so
+    // each post or group can be told apart (and still adds up to "facebook").
+    const src = clean(url.searchParams.get('ref') || url.searchParams.get('utm_source'));
+    const detail = clean(url.searchParams.get('utm_content') || url.searchParams.get('utm_campaign'));
+    const tag = src ? (detail ? `${src}/${detail}` : src) : '';
+    if (['ref', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content'].some((k) => url.searchParams.has(k))) {
+      ['ref', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].forEach((k) => url.searchParams.delete(k));
       history.replaceState(null, '', url.pathname + url.search + url.hash); // tidy the address bar
     }
     if (tag) return tag;
@@ -3992,6 +3997,30 @@ function startFunnel() {
   for (const k of done) if (!loadPref('step.' + k, '')) savePref('step.' + k, 'before');
 }
 
+// "Where visitors came from": each platform with its total, and under it the
+// tagged links (facebook/group3 shows as "group3" under facebook).
+function sourceRows(sources) {
+  const platforms = new Map();
+  for (const x of sources) {
+    const [p, detail] = x.source.split('/');
+    if (!platforms.has(p)) platforms.set(p, { name: p, visits: 0, new_visitors: 0, links: [] });
+    const g = platforms.get(p);
+    g.visits += x.visits; g.new_visitors += x.new_visitors;
+    g.links.push({ ...x, label: detail || 'no extra tag' });
+  }
+  const list = [...platforms.values()].sort((a, b) => b.visits - a.visits);
+  const top = Math.max(...list.map((g) => g.visits));
+  const name = (p) => (p === 'direct' ? 'Direct (typed in, home screen or bookmark)' : p);
+  const row = (label, n, nw, w, sub) => `
+    <div class="src-row ${sub ? 'sub' : ''}">
+      <div class="src-top"><${sub ? 'span' : 'b'}>${esc(label)}</${sub ? 'span' : 'b'}><span>${fmtNum(n)}${nw ? ` <em class="muted">· ${fmtNum(nw)} new</em>` : ''}</span></div>
+      <div class="src-bar"><span style="width:${Math.max(2, Math.round((n / w) * 100))}%"></span></div>
+    </div>`;
+  return list.map((g) => row(name(g.name), g.visits, g.new_visitors, top, false)
+    + (g.links.length > 1 || g.links[0].label !== 'no extra tag'
+      ? g.links.sort((a, b) => b.visits - a.visits).map((x) => row(x.label, x.visits, x.new_visitors, top, true)).join('') : '')).join('');
+}
+
 // The Stats page funnel: how many new devices reached each step, and the biggest drop.
 function renderFunnel(f, range) {
   const counts = f[range] || {};
@@ -4019,7 +4048,7 @@ function renderFunnel(f, range) {
     ${(f.bySource || []).length ? `
       <h3 class="steps-title">By link <span class="muted">(last 7 days)</span></h3>
       <div class="funnel-src"><span></span><b>Visited</b><b>Added</b><b>Registered</b>
-      ${f.bySource.map((x) => `<span>${esc(x.source)}</span><em>${fmtNum(x.visit)}</em><em>${fmtNum(x.first_item)}</em><em>${fmtNum(x.registered)}</em>`).join('')}</div>` : ''}
+      ${f.bySource.map((x) => `<span>${esc(x.source.replace('/', ' · '))}</span><em>${fmtNum(x.visit)}</em><em>${fmtNum(x.first_item)}</em><em>${fmtNum(x.registered)}</em>`).join('')}</div>` : ''}
     <p class="muted small">Each phone or computer is counted once per step, from the first time it reaches it. People who used Last Brick before this was switched on aren't counted.</p>`;
   document.querySelectorAll('[data-range]').forEach((b) => {
     b.onclick = () => { savePref('funnelRange', b.dataset.range); renderFunnel(f, b.dataset.range); };
@@ -4137,16 +4166,8 @@ async function renderStats() {
     </div>
     <div class="card">
       <h2>Where visitors came from <span class="muted small">last 30 days</span></h2>
-      ${(v.sources || []).length ? (() => {
-        const top = Math.max(...v.sources.map((x) => x.visits));
-        const name = (src) => (src === 'direct' ? 'Direct (typed in, home screen or bookmark)' : src);
-        return v.sources.map((x) => `
-          <div class="src-row">
-            <div class="src-top"><b>${esc(name(x.source))}</b><span>${fmtNum(x.visits)}${x.new_visitors ? ` <em class="muted">· ${fmtNum(x.new_visitors)} new</em>` : ''}</span></div>
-            <div class="src-bar"><span style="width:${Math.max(2, Math.round((x.visits / top) * 100))}%"></span></div>
-          </div>`).join('');
-      })() : '<p class="muted small">Nothing yet.</p>'}
-      <p class="muted small">Tip: share a tagged link in each post, e.g. <b>lastbrick.co.uk/?ref=facebook</b> or <b>?ref=reddit</b>, to see exactly which one brought people in.</p>
+      ${(v.sources || []).length ? sourceRows(v.sources) : '<p class="muted small">Nothing yet.</p>'}
+      <p class="muted small">Tip: give each post its own link, e.g. <b>lastbrick.co.uk/?utm_source=facebook&amp;utm_content=group3</b>, to see exactly which one brought people in. "No extra tag" includes visits from before tags were saved.</p>
     </div>
 
     <h3 class="steps-title">Accounts</h3>

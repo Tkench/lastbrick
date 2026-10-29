@@ -106,7 +106,7 @@ begin
         select coalesce(nullif(source, ''), 'direct') as source, count(*) as visits,
                count(*) filter (where new_visitor) as new_visitors
         from public.visits where day > current_date - 30
-        group by 1 order by count(*) desc limit 12) t),
+        group by 1 order by count(*) desc limit 40) t),
       'byDay', (select jsonb_agg(jsonb_build_array(g.d, coalesce(v.n, 0)) order by g.d)
                 from generate_series(current_date - 29, current_date, interval '1 day') g(d)
                 left join (select day, count(*) n from public.visits group by day) v on v.day = g.d::date)
@@ -151,7 +151,7 @@ begin
                count(*) filter (where step = 'first_item') as first_item,
                count(*) filter (where step = 'registered') as registered
         from public.funnel where day > current_date - 7
-        group by 1 order by 2 desc limit 8) t)
+        group by 1 order by 2 desc limit 40) t)
     ),
     'reports', jsonb_build_object(
       'total', (select count(*) from public.reports),

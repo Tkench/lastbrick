@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.6.1';
+const APP_VERSION = '1.7.0';
 const APP_DATE = '2026-10-29';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -1130,10 +1130,9 @@ function scanHeadIcon(cls = 'scan-ico') {
 function renderWelcome() {
   setWelcomeHeader();
   $('#view').innerHTML = `
-    <section class="hero">
-      ${brandArt({ animate: true, cls: 'hero-art' })}
-      <h2 class="hero-title">Find the missing pieces.<br><span class="accent">Finish every set.</span></h2>
-      <p class="hero-sub">Rebuild old LEGO® sets from a pile of bricks: see exactly what's missing, with a picture of every piece.</p>
+    <section class="hero welcome-hero">
+      <h2 class="hero-title">Got a box of mixed LEGO®?<br><span class="accent">Turn it back into sets.</span></h2>
+      <p class="hero-sub">Pick one to try now. It's free.</p>
     </section>
     ${needsOwnKey() ? `<div class="card">
       <h2>One-time setup: free Rebrickable key</h2>
@@ -1146,7 +1145,22 @@ function renderWelcome() {
       <p></p>
       <button class="btn primary block" id="saveKey">Save and start</button>
     </div>` : `
-    <button class="btn primary block hero-cta" id="startBtn">Try it with your first set</button>`}
+    <button class="big-choice red" id="startFig">
+      <span class="choice-tag">TRY THIS FIRST</span>
+      <span class="choice-ico">${scanFigIcon('')}</span>
+      <span class="choice-text"><b>Who's this minifigure?</b><small>Snap it and find out who it is</small></span>
+      <span class="choice-go" aria-hidden="true">›</span>
+    </button>
+    <button class="big-choice white" id="startBtn">
+      <span class="choice-ico">${scanIcon({ cls: '' }).replace('<rect x="4.5" y="12.4"', '<rect class="ico-scan-line" x="4.5" y="12.4"')}</span>
+      <span class="choice-text"><b>Rebuild a set</b><small>Type the number from the box and see what's missing</small></span>
+      <span class="choice-go" aria-hidden="true">›</span>
+    </button>
+    <div class="welcome-facts">
+      <div><b>17,000+</b>minifigures</div>
+      <div><b>Almost every</b>LEGO® set</div>
+      <div><b>Free</b>no sign-up</div>
+    </div>`}
     ${syncEnabled() ? `<p class="center small hero-login">Already have an account? <a href="#settings">Log in</a></p>` : ''}
     <h3 class="steps-title">How it works</h3>
     ${swipeCards('steps', [
@@ -1161,6 +1175,16 @@ function renderWelcome() {
   bindSwipeCards('steps');
   if ($('#startBtn')) {
     $('#startBtn').onclick = () => { funnelStep('start'); state.welcomed = true; save(); go('#add'); render(); };
+    // Straight to the camera: the Add a minifigure page shows the answer.
+    $('#startFig').onclick = () => {
+      funnelStep('start');
+      state.welcomed = true; save();
+      ui.collection = 'figs'; savePref('collection', 'figs');
+      resetFigAdd();
+      figAdd.scanKind = 'fig';
+      go('#addfig');
+      $('#figCameraInput').click();
+    };
     return;
   }
   $('#saveKey').onclick = () => {

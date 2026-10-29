@@ -846,3 +846,25 @@ body.welcome .topbar {
 .funnel-src em { font-style: normal; text-align: right; font-weight: 700; }
 .funnel-src span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .src-row.sub { margin-left: 16px; } .src-row.sub .src-top span:first-child { color: var(--muted); } .src-row.sub .src-bar span { opacity: .55; }
+
+/* Welcome: two big choices */
+.welcome-hero { padding-top: 6px; }
+.welcome-hero .hero-title { font-size: 30px; line-height: 1.12; }
+.welcome-hero .hero-sub { margin-bottom: 18px; }
+.big-choice { position: relative; display: flex; align-items: center; gap: 16px; width: 100%; text-align: left; border-radius: 24px; padding: 30px 18px; min-height: 182px; margin-bottom: 20px; font: inherit; cursor: pointer; }
+.big-choice .choice-ico { flex: none; width: 92px; height: 92px; border-radius: 22px; display: grid; place-items: center; background: #fff; }
+.big-choice .choice-ico svg { width: 66px; height: 62px; }
+.big-choice b { display: block; font-size: 23px; line-height: 1.15; margin-bottom: 6px; }
+.big-choice small { display: block; font-size: 16px; line-height: 1.35; }
+.big-choice .choice-go { margin-left: auto; flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; font-weight: 800; }
+.big-choice .choice-tag { position: absolute; top: -12px; left: 20px; font-size: 12px; font-weight: 800; letter-spacing: .06em; border-radius: 999px; padding: 4px 11px; background: #ffd43b; color: #1b1b1f; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+.big-choice.red { border: 0; background: linear-gradient(135deg, #e2231a, #b40d10); color: #fff; box-shadow: 0 12px 26px rgba(208,16,18,.34); }
+.big-choice.red small { opacity: .92; }
+.big-choice.red .choice-go { background: #fff; color: #d01012; }
+.big-choice.white { border: 3px solid #d01012; background: var(--card); color: var(--text); box-shadow: 0 8px 18px rgba(0,0,0,.08); }
+.big-choice.white .choice-ico { background: #fdecec; }
+.big-choice.white .choice-go { background: #d01012; color: #fff; }
+.big-choice:active { transform: scale(.98); }
+.big-choice.white .ico-scan-line { animation-duration: 2.3s; animation-delay: -1.1s; }
+.welcome-facts { display: flex; justify-content: space-around; text-align: center; margin: 4px 0 6px; font-size: 12px; color: var(--muted); line-height: 1.25; }
+.welcome-facts b { display: block; font-size: 20px; color: var(--text); }

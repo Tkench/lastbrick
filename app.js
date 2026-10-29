@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.9.2';
+const APP_VERSION = '1.9.3';
 const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -4213,15 +4213,15 @@ function renderFunnel(f, range) {
         ${i === worst ? `<div class="small funnel-note">⬆ Biggest drop: ${fmtNum(worstLoss)} ${worstLoss === 1 ? 'person' : 'people'} stopped here</div>` : ''}
       </div>`).join('')
       : '<p class="muted small">No new visitors counted yet. Steps are counted from when this was switched on, for people new to Last Brick.</p>'}
-    ${counts.tap_fig || counts.tap_set || counts.how || counts.demo || counts.scan ? `
-      <h3 class="steps-title">On the welcome screen</h3>
+    ${`
+      <h3 class="steps-title">On the welcome screen <span class="muted">(counting since 29 Oct)</span></h3>
       <div class="funnel-extra">
         <div><b>${fmtNum(counts.tap_fig || 0)}</b>tapped <i>Who's this minifigure?</i></div>
         <div><b>${fmtNum(counts.tap_set || 0)}</b>tapped <i>Rebuild a set</i></div>
         <div><b>${fmtNum(counts.how || 0)}</b>looked at <i>How it works</i></div>
         <div><b>${fmtNum(counts.demo || 0)}</b>opened the example set</div>
         <div><b>${fmtNum(counts.scan || 0)}</b>tried scanning</div>
-      </div>` : ''}
+      </div>`}
     ${(f.bySource || []).length ? `
       <h3 class="steps-title">By link <span class="muted">(last 7 days)</span></h3>
       <div class="funnel-src"><span></span><b>Visited</b><b>Added</b><b>Registered</b>

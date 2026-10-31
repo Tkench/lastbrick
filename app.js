@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.9.4';
+const APP_VERSION = '1.9.5';
 const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -1141,10 +1141,10 @@ function tickBrickIcon(cls = 'scan-ico') {
 
 // The steps on the welcome page, in the same order as its two buttons.
 const HOW_IT_WORKS = () => [
-  [scanFigIcon('scan-ico big'), 'Scan a minifigure', 'Snap a photo to find out who it is and which set it came from.'],
   [scanIcon({ cls: 'scan-ico big' }), 'Add your sets', 'Type the number from the box or manual and the full parts list appears.'],
   [tickBrickIcon('scan-ico big'), 'Tick what you have', 'See exactly which pieces are still missing, in every colour.'],
   [scanHeadIcon('scan-ico big'), 'Find and scan pieces', 'Spot a piece in the pile? Scan it to see which of your sets needs it.'],
+  [scanFigIcon('scan-ico big'), 'Scan a minifigure', 'Snap a photo to find out who it is and which set it came from.'],
 ];
 
 function renderWelcome() {
@@ -1166,15 +1166,15 @@ function renderWelcome() {
       <p></p>
       <button class="btn primary block" id="saveKey">Save and start</button>
     </div>` : `
-    <button class="big-choice red" id="startFig">
+    <button class="big-choice red" id="startBtn">
       <span class="choice-tag">TRY IT NOW</span>
-      <span class="choice-ico">${scanFigIcon('')}</span>
-      <span class="choice-text"><b>Who's this minifigure?</b><small>Snap it and find out who it is</small></span>
-      <span class="choice-go" aria-hidden="true">›</span>
-    </button>
-    <button class="big-choice white" id="startBtn">
       <span class="choice-ico">${scanIcon({ cls: '' }).replace('<rect x="4.5" y="12.4"', '<rect class="ico-scan-line" x="4.5" y="12.4"')}</span>
       <span class="choice-text"><b>Rebuild a set</b><small>Type the number from the box and see what's missing</small></span>
+      <span class="choice-go" aria-hidden="true">›</span>
+    </button>
+    <button class="big-choice white" id="startFig">
+      <span class="choice-ico">${scanFigIcon('')}</span>
+      <span class="choice-text"><b>Who's this minifigure?</b><small>Snap it and find out who it is</small></span>
       <span class="choice-go" aria-hidden="true">›</span>
     </button>
     <div class="welcome-facts">
@@ -1188,8 +1188,8 @@ function renderWelcome() {
     </div>
     <section class="welcome-how" id="how">
     ${swipeCards('steps', HOW_IT_WORKS())}
-    ${needsOwnKey() ? '' : `<button class="btn primary block hero-cta" id="tryNow">${scanFigIcon('scan-ico btn-ico')} Try it now: scan a minifigure</button>
-    <p class="center small"><button class="link-btn" id="tryNowSet">or add a set by number</button></p>`}
+    ${needsOwnKey() ? '' : `<button class="btn primary block hero-cta" id="tryNowSet">${scanIcon({ cls: 'scan-ico btn-ico', onRed: true })} Rebuild a set</button>
+    <button class="btn block hero-cta second" id="tryNow">${scanFigIcon('scan-ico btn-ico')} Who's this minifigure?</button>`}
     </section>
     <footer class="welcome-foot small muted">
       <a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Use</a>

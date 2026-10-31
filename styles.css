@@ -1019,3 +1019,8 @@ body.welcome .topbar {
 .stats-sec[open] summary .chev { transform: rotate(90deg); }
 .stats-body { padding: 0 16px 16px; }
 .stats-body .stat-grid { margin-bottom: 8px; }
+/* Welcome: "Rebuild a set" is now the red button; the minifigure scan the white one */
+.big-choice.red .choice-ico svg { width: 66px; height: 62px; }
+.big-choice.red .ico-scan-line { animation-duration: 1.8s; animation-delay: 0s; }
+.big-choice.white .ico-scan-line { animation-duration: 2.3s; animation-delay: -1.1s; }
+.welcome-how .hero-cta.second { margin-top: 10px; background: var(--card); color: var(--text); border: 2px solid var(--brand); box-shadow: none; }

@@ -15,6 +15,9 @@
 //   sets.json      { set_num: [name, year, pieces, minifigures] } for every set with a
 //                  minifigure, so the app can say which set a version came in, and spot
 //                  figures sold on their own (a small set with just one figure)
+//   allsets.json   { themes: [[name, parentIndex]…], sets: [[set_num, name, year, themeIndex, pieces, picture]…] }
+//                  every set with pieces, for searching by name or theme on Add a set.
+//                  picture is 1 when it's the usual sets/<set_num>.jpg, else the path or ''
 //   meta.json      when it was built and how big it is
 // Parts are spread over 256 files by a hash of the part number (see shardOf,
 // which app.js repeats), so a scan downloads only one small file.
@@ -105,9 +108,21 @@ await eachRow('inventory_minifigs.csv.gz', (r) => {
 });
 // Names, years and sizes of those sets.
 const setInfo = {};
+const allSets = [];
 await eachRow('sets.csv.gz', (r) => {
   if (setFigCount.has(r.set_num)) setInfo[r.set_num] = [r.name, Number(r.year) || 0, Number(r.num_parts) || 0, setFigCount.get(r.set_num)];
+  const pieces = Number(r.num_parts) || 0;
+  if (pieces > 0) {
+    const pic = short(r.img_url);
+    allSets.push([r.set_num, r.name, Number(r.year) || 0, Number(r.theme_id) || 0, pieces, pic === `sets/${r.set_num}.jpg` ? 1 : pic]);
+  }
 });
+// Themes (e.g. "Black Knights" inside "Castle"), so searching "castle" finds them all.
+const themeRows = [];
+await eachRow('themes.csv.gz', (r) => { themeRows.push([Number(r.id), r.name, Number(r.parent_id) || 0]); });
+const themeIndex = new Map(themeRows.map(([id], i) => [id, i]));
+const themes = themeRows.map(([, name, parent]) => [name, themeIndex.has(parent) ? themeIndex.get(parent) : -1]);
+for (const x of allSets) x[3] = themeIndex.has(x[3]) ? themeIndex.get(x[3]) : -1;
 
 // 2. Which pieces (in which colour) each of those inventories holds.
 const index = new Map(); // part_num -> { n, c: { colour: { i, f: Set(fig_num) } } }
@@ -166,5 +181,6 @@ for (const byHips of Object.values(legs)) {
 }
 fs.writeFileSync(path.join(OUT, 'legs.json'), JSON.stringify(legs));
 fs.writeFileSync(path.join(OUT, 'sets.json'), JSON.stringify(setInfo));
-fs.writeFileSync(path.join(OUT, 'meta.json'), JSON.stringify({ built: new Date().toISOString(), figs: latest.size, parts: index.size, sets: Object.keys(setInfo).length, imageBase: IMG }));
+fs.writeFileSync(path.join(OUT, 'allsets.json'), JSON.stringify({ themes, sets: allSets }));
+fs.writeFileSync(path.join(OUT, 'meta.json'), JSON.stringify({ built: new Date().toISOString(), figs: latest.size, parts: index.size, sets: Object.keys(setInfo).length, allSets: allSets.length, imageBase: IMG }));
 console.log(`Done: ${latest.size} minifigures, ${index.size} different pieces.`);

@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.10.1';
+const APP_VERSION = '1.11.0';
 const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -1630,6 +1630,49 @@ function renderSets() {
   });
 }
 
+/* ---------- Find a set by name or theme ----------
+ * allsets.json (from the weekly lookup): every set with its theme. Loaded the
+ * first time someone searches, and searched on the phone. */
+let allSetsData = null;
+async function loadAllSets() {
+  if (allSetsData) return allSetsData;
+  const raw = await figIndexFile('allsets.json');
+  if (!raw) return null;
+  const themePath = (i) => { const out = []; for (let n = 0; i >= 0 && n < 5; n++) { out.unshift(raw.themes[i][0]); i = raw.themes[i][1]; } return out; };
+  allSetsData = raw.sets.map(([num, name, year, theme, pieces, pic]) => {
+    const path = theme >= 0 ? themePath(theme) : [];
+    return {
+      num, name, year, pieces,
+      theme: path.join(' › '),
+      img: pic === 1 ? `${RB_MEDIA}sets/${num}.jpg` : pic ? RB_MEDIA + pic : '',
+      nameL: ' ' + name.toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ',
+      themeL: ' ' + path.join(' ').toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ',
+    };
+  });
+  return allSetsData;
+}
+
+// Every word must match the start of a word in the name or theme; a year like 1989
+// narrows to that year. Name matches rank first, then bigger sets.
+function searchSets(data, query) {
+  const words = query.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  const years = words.filter((w) => /^(19[4-9]\d|20\d\d)$/.test(w)).map(Number);
+  const terms = words.filter((w) => !/^(19[4-9]\d|20\d\d)$/.test(w));
+  const out = [];
+  for (const x of data) {
+    if (years.length && !years.includes(x.year)) continue;
+    let score = 0, ok = true;
+    for (const t of terms) {
+      if (x.nameL.includes(' ' + t)) score += 2;
+      else if (x.themeL.includes(' ' + t)) score += 1;
+      else if (x.num.startsWith(t)) score += 3;
+      else { ok = false; break; }
+    }
+    if (ok && (terms.length || years.length)) out.push({ x, score });
+  }
+  return out.sort((a, b) => b.score - a.score || b.x.pieces - a.x.pieces).slice(0, 30).map((r) => r.x);
+}
+
 function renderAdd() {
   setTitle('Add a set');
   $('#view').innerHTML = `
@@ -1637,6 +1680,12 @@ function renderAdd() {
       <label class="lbl" for="setNum">Set number</label>
       <input class="field" id="setNum" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. 6080" autocomplete="off" autocapitalize="off">
       <p class="muted small">It's on the front of the manual and the box.</p>
+      <button class="link-btn find-by-name" id="byNameBtn">Don't know the number? Search by name or theme</button>
+      <div id="byName" class="hidden">
+        <label class="lbl" for="setNameSearch">Search by name or theme</label>
+        <input class="field" id="setNameSearch" type="search" autocomplete="off" placeholder="e.g. castle, fire station, pirate ship 1989">
+        <div id="byNameResults" role="status"></div>
+      </div>
       <label class="lbl">How complete is it?</label>
       <div class="seg" id="startMode">
         <button data-v="most">Mostly complete</button>
@@ -1723,6 +1772,34 @@ function renderAdd() {
   };
   $('#fetchBtn').onclick = submit;
   input.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+  // Search by name or theme: tap a result to check it's your set, as with a number.
+  const nameBox = $('#setNameSearch');
+  $('#byNameBtn').onclick = () => { $('#byName').classList.remove('hidden'); $('#byNameBtn').classList.add('hidden'); nameBox.focus(); loadAllSets(); };
+  let nameTimer = null;
+  nameBox.oninput = () => {
+    clearTimeout(nameTimer);
+    nameTimer = setTimeout(async () => {
+      const out = $('#byNameResults');
+      const q = nameBox.value.trim();
+      if (q.length < 2) { out.innerHTML = ''; return; }
+      const data = await loadAllSets();
+      if (nameBox.value.trim() !== q) return;
+      if (!data) { out.innerHTML = '<p class="muted small">Search isn\'t ready yet. Please try again later, or type the set number above.</p>'; return; }
+      const found = searchSets(data, q);
+      out.innerHTML = found.length ? `
+        <p class="muted small">${found.length >= 30 ? 'Top 30 matches. Add more words or a year to narrow it down.' : `${plural(found.length, 'match', 'matches')}`}</p>
+        <div class="name-results">${found.map((x) => `
+          <button class="name-result" data-pick="${esc(x.num)}">
+            <span class="thumb">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : '🧱'}</span>
+            <span class="grow"><b>${esc(x.name)}</b><small>#${esc(shortSetNum(x.num))} · ${x.year} · ${plural(x.pieces, 'piece', 'pieces')}${x.theme ? ' · ' + esc(x.theme) : ''}</small>${state.sets[x.num] ? '<span class="badge ok">In your sets</span>' : ''}</span>
+            <span class="chev" aria-hidden="true">›</span>
+          </button>`).join('')}</div>`
+        : `<p class="muted small">No sets match “${esc(q)}”. Try fewer or different words, e.g. just “castle”.</p>`;
+      out.querySelectorAll('[data-pick]').forEach((b) => {
+        b.onclick = () => { input.value = shortSetNum(b.dataset.pick); window.scrollTo(0, 0); submit(); };
+      });
+    }, 200);
+  };
   // "#add/8098-1" (from a minifigure's "Got that set?"): fill in the number and look it up.
   const given = route().arg;
   if (given) { input.value = shortSetNum(given); submit(); }
@@ -4769,6 +4846,8 @@ const FAQ = [
     "Your account backs up your sets online, so they're safe if you lose or change your phone, and lets you use Last Brick on more than one device. We only ask for an email and password."],
   ['How does scanning work?',
     "Tap <b>Scan</b> and take a photo of one piece on a plain background. Last Brick recognises it and shows which of your sets need it, so you can tick it off. For best results, scan one piece at a time in good light."],
+  ["I don't know my set's number. What can I do?",
+    "On <b>Add a set</b>, tap <b>Don't know the number? Search by name or theme</b> and type what you remember, like “castle”, “fire station” or “pirate ship 1989”. Pictures help you spot yours."],
   ['How do I add a minifigure?',
     "On the <b>Sets</b> tab, switch to <b>Minifigures</b> and tap <b>Add a minifigure</b>. Choose <b>Scan whole figure</b>, or <b>Scan one piece</b> such as the torso or legs. Printed torsos usually point to just one or two figures. If you've got the set a figure came in, Last Brick offers to move it into that set."],
   ["The scan picked the wrong piece or figure. What now?",

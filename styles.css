@@ -1058,3 +1058,15 @@ body.welcome .topbar {
 .topbar :focus-visible { outline-color: #fff; box-shadow: 0 0 0 4px #1b1b1f; }
 /* The welcome headline is now the page heading (h1) */
 h1.hero-title { font-size: 26px; font-weight: 800; }
+
+/* Add a set: search by name or theme */
+.find-by-name { display: block; margin: 2px 0 10px; font-weight: 700; text-align: left; }
+#byName { margin-bottom: 10px; }
+.name-results { display: grid; gap: 6px; margin-top: 6px; }
+.name-result { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); font: inherit; color: var(--text); cursor: pointer; }
+.name-result .thumb { flex: none; width: 64px; height: 52px; background: #fff; border-radius: 8px; display: grid; place-items: center; overflow: hidden; }
+.name-result .thumb img { max-width: 92%; max-height: 92%; object-fit: contain; }
+.name-result b { display: block; line-height: 1.25; }
+.name-result small { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; }
+.name-result .badge { margin-top: 3px; }
+.name-result .chev { margin-left: auto; color: var(--brand); font-size: 22px; font-weight: 800; }

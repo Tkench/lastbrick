@@ -1079,3 +1079,8 @@ h1.hero-title { font-size: 26px; font-weight: 800; }
 .next-tip ol { margin: 0 0 12px; padding-left: 20px; line-height: 1.45; font-size: 15px; }
 .next-tip li { margin-bottom: 6px; }
 .next-tip .sheet-x { position: static; float: right; }
+
+/* iPhone home-screen app: the tab bar can sit a little above the bottom of the
+   screen, leaving a grey band under it on short pages. Its white background now
+   carries on below it, so the bottom of the screen is always covered. */
+.tabs::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 160px; background: var(--card); }

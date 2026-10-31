@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Page not found – Last Brick</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <style>
+    :root { --brand: #d01012; --text: #1b1b1f; --muted: #6b6b76; --bg: #f4f4f6; --card: #fff; }
+    @media (prefers-color-scheme: dark) { :root { --text: #f1f1f4; --muted: #a0a0ab; --bg: #121215; --card: #1d1d22; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: var(--bg); color: var(--text);
+      font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; }
+    .box { max-width: 420px; width: 100%; background: var(--card); border-radius: 20px; padding: 28px 22px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .logo { display: block; width: 72px; height: 72px; margin: 0 auto 10px; border-radius: 16px; }
+    h1 { font-size: 24px; margin: 6px 0; }
+    p { color: var(--muted); margin: 0 0 18px; }
+    a.btn { display: block; background: var(--brand); color: #fff; text-decoration: none; font-weight: 700; font-size: 17px; padding: 14px; border-radius: 14px; }
+    small { display: block; margin-top: 14px; color: var(--muted); }
+  </style>
+  <script>
+    // Links like lastbrick.co.uk/sets go to the right page in the app (#sets);
+    // anything else goes to the start. Link tags (?utm_source=…) are kept.
+    (function () {
+      var page = location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+      var known = ['sets', 'missing', 'looking-for', 'scan', 'settings', 'help', 'add', 'addfig', 'demo', 'example'];
+      var map = { 'looking-for': 'missing', example: 'demo' };
+      var hash = known.indexOf(page) >= 0 ? '#' + (map[page] || page) : '';
+      var target = '/' + location.search + hash;
+      setTimeout(function () { location.replace(target); }, 1500);
+      document.addEventListener('DOMContentLoaded', function () { document.getElementById('go').href = target; });
+    })();
+  </script>
+</head>
+<body>
+  <div class="box">
+    <img class="logo" src="/icons/icon-192.png" alt="">
+    <h1>That page isn't here</h1>
+    <p>Taking you to Last Brick…</p>
+    <a class="btn" id="go" href="/">Go to Last Brick</a>
+    <small>LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.</small>
+  </div>
+</body>
+</html>

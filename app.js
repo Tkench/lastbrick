@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.11.1';
+const APP_VERSION = '1.11.2';
 const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -3403,7 +3403,20 @@ function renderSet(setNum) {
   const parts = inFilter.filter((p) =>
     (!ui.partColor || p.colorName === ui.partColor) && (!ui.partType || pieceType(p) === ui.partType));
 
+  // First set added: a short "what next?" until it's dismissed.
+  const sets = Object.values(state.sets).filter((x) => !isFig(x));
+  const firstSetTip = !isFig(set) && sets.length === 1 && !loadPref('firstSetTip', '');
   let html = `
+    ${firstSetTip ? `
+    <div class="card next-tip" role="status">
+      <button class="sheet-x" id="nextTipX" aria-label="Hide this tip">✕</button>
+      <h2>🎉 Added! What next?</h2>
+      <ol>
+        <li><b>Tick the pieces you already have.</b> Tap <b>+</b> on each one, or if it's nearly complete use <b>Tick all as have</b> at the bottom and untick the missing ones.</li>
+        <li><b>Found a loose piece?</b> Scan it to see if this set needs it.</li>
+      </ol>
+      <button class="btn primary block" id="nextTipScan">${scanIcon({ onRed: true, cls: 'scan-ico btn-ico' })} Scan a piece</button>
+    </div>` : ''}
     <div class="card set-card" style="cursor:default">
       ${set.img ? `<img src="${esc(set.img)}" alt="">` : ''}
       <div class="grow">
@@ -3533,6 +3546,8 @@ function renderSet(setNum) {
   }
   document.querySelectorAll('[data-setfig]').forEach((b) => { b.onclick = () => showSetFigSheet(set, Number(b.dataset.setfig), rerender); });
   if ($('#toFig')) $('#toFig').onclick = () => turnIntoFig(set);
+  if ($('#nextTipX')) $('#nextTipX').onclick = () => { savePref('firstSetTip', '1'); const y = window.scrollY; renderSet(setNum); window.scrollTo(0, y); };
+  if ($('#nextTipScan')) $('#nextTipScan').onclick = () => { savePref('firstSetTip', '1'); go('#scan'); $('#cameraInput').click(); };
   document.querySelectorAll('[data-move-back]').forEach((b) => { b.onclick = () => moveFigsBack(setNum, Number(b.dataset.moveBack)); });
   if ($('#moveAllBack')) $('#moveAllBack').onclick = () => moveFigsBack(setNum);
   if ($('#looseIn')) {
@@ -4688,7 +4703,7 @@ function renderAccountCard(opts = {}) {
     <p class="form-error" id="authErr" role="alert"></p>
     <button class="btn primary block" id="${create ? 'registerBtn' : 'loginBtn'}">${create ? 'Create free account' : 'Log in'}</button>
     ${create ? '' : '<p class="small" style="margin-top:12px"><a href="#" id="forgotPw">Forgot password?</a></p>'}
-    <p class="muted small">Your email and sets are stored securely and only you can see them.</p>`;
+    <p class="made-by small">Built by Tracey, a LEGO fan in the UK. No spam, no tracking, delete any time. <a href="privacy.html">Privacy Policy</a></p>`;
   card.querySelectorAll('[data-auth]').forEach((b) => { b.onclick = () => renderAccountCard({ mode: b.dataset.auth }); });
   const showErr = (id, msg) => {
     const el = $('#' + id);

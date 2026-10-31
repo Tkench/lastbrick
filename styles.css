@@ -1070,3 +1070,12 @@ h1.hero-title { font-size: 26px; font-weight: 800; }
 .name-result small { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; }
 .name-result .badge { margin-top: 3px; }
 .name-result .chev { margin-left: auto; color: var(--brand); font-size: 22px; font-weight: 800; }
+
+/* "Built by Tracey" on the account screen */
+.made-by { margin-top: 12px; padding: 10px 12px; background: var(--chip); border-radius: 10px; color: var(--text); line-height: 1.4; }
+/* First set: what next? */
+.next-tip { border: 2px solid #ffd43b; background: #fff8db; color: #1b1b1f; }
+.next-tip h2 { margin: 0 0 6px; }
+.next-tip ol { margin: 0 0 12px; padding-left: 20px; line-height: 1.45; font-size: 15px; }
+.next-tip li { margin-bottom: 6px; }
+.next-tip .sheet-x { position: static; float: right; }

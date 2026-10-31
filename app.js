@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.11.2';
+const APP_VERSION = '1.11.3';
 const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -1237,7 +1237,7 @@ function renderWelcome() {
     <button class="btn block hero-cta second" id="tryNow">${scanFigIcon('scan-ico btn-ico')} Who's this minifigure?</button>`}
     </section>
     <footer class="welcome-foot small muted">
-      <a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Use</a>
+      <a href="about.html">About</a> · <a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Use</a>
       <p>LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.</p>
     </footer>`;
   bindSwipeCards('steps');
@@ -4595,7 +4595,7 @@ function renderSettings() {
     <div class="card small muted">
       <h2 style="color:var(--text)">About</h2>
       <p>Parts lists and pictures: <a href="https://rebrickable.com" target="_blank" rel="noopener">Rebrickable</a>. Piece recognition: <a href="https://brickognize.com" target="_blank" rel="noopener">Brickognize</a>. LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.</p>
-      <p><a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Use</a> · <a href="mailto:hello@lastbrick.co.uk">hello@lastbrick.co.uk</a></p>
+      <p><a href="about.html">About Last Brick</a> · <a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Use</a> · <a href="mailto:hello@lastbrick.co.uk">hello@lastbrick.co.uk</a></p>
       <p class="app-version">Last Brick ${APP_VERSION} · ${new Date(APP_DATE + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
     </div>`;
   if ($('#saveKey')) $('#saveKey').onclick = () => {
@@ -4703,7 +4703,7 @@ function renderAccountCard(opts = {}) {
     <p class="form-error" id="authErr" role="alert"></p>
     <button class="btn primary block" id="${create ? 'registerBtn' : 'loginBtn'}">${create ? 'Create free account' : 'Log in'}</button>
     ${create ? '' : '<p class="small" style="margin-top:12px"><a href="#" id="forgotPw">Forgot password?</a></p>'}
-    <p class="made-by small">Built by Tracey, a LEGO fan in the UK. No spam, no tracking, delete any time. <a href="privacy.html">Privacy Policy</a></p>`;
+    <p class="made-by small">Built by <a href="about.html">Tracey</a>, a LEGO fan in the UK. No spam, no tracking, delete any time. <a href="privacy.html">Privacy Policy</a></p>`;
   card.querySelectorAll('[data-auth]').forEach((b) => { b.onclick = () => renderAccountCard({ mode: b.dataset.auth }); });
   const showErr = (id, msg) => {
     const el = $('#' + id);

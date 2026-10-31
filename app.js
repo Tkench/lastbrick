@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.9.5';
+const APP_VERSION = '1.10.0';
 const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -331,21 +331,40 @@ function needsAccount() {
 
 // Returns true if adding can go ahead; otherwise shows the sign-up panel and,
 // once they're logged in, runs `then`.
-function accountGate(then = () => render()) {
+// reason (optional): { title, text, pic } to say what's being saved, and
+// keep: true to carry on (e.g. add the set) even while the email still needs confirming.
+let gateKeep = false;
+function accountGate(then = () => render(), reason = null) {
   if (!needsAccount()) return true;
   funnelStep('gate');
   openSheet(`
-    <div class="gate">
+    <div class="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
       <button class="sheet-x" data-close aria-label="Close">✕</button>
-      ${brandArt({ cls: 'gate-art' })}
-      <h2>Create a free account to add more</h2>
-      <p class="muted">You've tried Last Brick with your first ${Object.values(state.sets).some(isFig) ? 'minifigure' : 'set'}. A free account lets you add as many sets and minifigures as you like, backs them up, and keeps them in sync on your other devices.</p>
+      ${reason && reason.pic ? `<div class="gate-pic">${reason.pic}</div>` : brandArt({ cls: 'gate-art' })}
+      <h2 id="gateTitle">${reason ? reason.title : 'Create a free account to add more'}</h2>
+      <p class="muted">${reason ? reason.text : `You've tried Last Brick with your first ${Object.values(state.sets).some(isFig) ? 'minifigure' : 'set'}. A free account lets you add as many sets and minifigures as you like, backs them up, and keeps them in sync on your other devices.`}</p>
       <p class="muted small">What you've already added comes with you.</p>
       <div id="accountCard" class="gate-card"></div>
     </div>`);
+  gateKeep = !!(reason && reason.keep);
   afterAuth = () => { closeSheet(); then(); };
-  renderAccountCard();
+  renderAccountCard({ mode: 'create' });
   return false;
+}
+
+// "Saved on this phone only · Create a free account": the same panel, without a wall.
+function showBackupSheet() {
+  openSheet(`
+    <div class="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+      <button class="sheet-x" data-close aria-label="Close">✕</button>
+      ${brandArt({ cls: 'gate-art' })}
+      <h2 id="gateTitle">Back up your sets</h2>
+      <p class="muted">At the moment your sets are saved on this phone only. A free account backs them up, keeps them safe if you lose or change your phone, and lets you add as many as you like.</p>
+      <div id="accountCard" class="gate-card"></div>
+    </div>`);
+  gateKeep = false;
+  afterAuth = () => { closeSheet(); render(); };
+  renderAccountCard({ mode: 'create' });
 }
 
 function authDone(message) {
@@ -515,7 +534,7 @@ async function partCategories() {
   return state.partCats;
 }
 
-const SET_NOT_FOUND = 'Set not found. Check the number on the box or manual (e.g. 6080 or 6080-1).';
+const SET_NOT_FOUND = 'Set not found. Check the number on the box or manual (e.g. 6080).';
 const helperAvailable = () => syncEnabled();
 const needsOwnKey = () => !helperAvailable() && !state.apiKey;
 
@@ -1180,7 +1199,7 @@ function renderWelcome() {
     <div class="welcome-facts">
       <div><b>17,000+</b>minifigures</div>
       <div><b>Almost every</b>LEGO® set</div>
-      <div><b>Free</b>no sign-up</div>
+      <div><b>Free</b>first set, no sign-up</div>
     </div>`}
     <p class="center small demo-link">No LEGO to hand? <a href="#demo">See an example</a></p>
     ${syncEnabled() ? `<p class="center small hero-login">Already have an account? <a href="#settings">Log in</a></p>` : ''}
@@ -1420,6 +1439,7 @@ function renderSets() {
       <button data-c="figs" class="${figs ? 'active' : ''}">${figIcon()} Minifigures <em>${figCount}</em></button>
     </div>
     <button class="btn primary block" id="addBtn">＋ Add a ${word[0]}</button><p></p>
+    ${syncEnabled() && !session && everything.length ? `<button class="guest-banner" id="guestBanner"><span>☁️ <b>Saved on this phone only</b><small>Create a free account to back it up</small></span><span class="chev" aria-hidden="true">›</span></button>` : ''}
     ${figs ? renderFigHints() : ''}
     ${figs && plainFigs().length ? `<div class="choose-bar"><span>🤔 <b>${plural(plainFigs().length, 'figure needs', 'figures need')}</b> ${plainFigs().length === 1 ? 'its' : 'their'} version chosen</span><button class="btn small" id="choosePlain">Choose</button></div>` : ''}`;
   if (!all.length) {
@@ -1459,7 +1479,7 @@ function renderSets() {
     const valued = all.filter(hasValue);
     html += `<p class="muted small">${valued.length
       ? `Total value: <b>${money(valued.reduce((t, s) => t + s.value, 0))}</b> (${valued.length} of ${all.length} ${word[1]} valued)${ui.setSort === 'worth' ? '. Most value per missing piece first.' : ''}`
-      : showTip('value') ? `Tip: add a value to each ${word[0]} (open it and tap <b>Add value</b>) to see which are worth finishing first.` : ''}</p>`;
+      : showTip('value') ? `Tip: add a value to each ${word[0]} (open it and tap <b>Add resale value</b>) to see which are worth finishing first.` : ''}</p>`;
     if (all.length > 4) html += searchBox('setSearch', ui.setSearch, `Search ${word[1]}…`);
 
     const q = ui.setSearch.toLowerCase();
@@ -1555,10 +1575,11 @@ function renderSets() {
   }
   $('#view').innerHTML = html;
   // Minifigures can still be scanned without an account; the check happens when adding.
+  if ($('#guestBanner')) $('#guestBanner').onclick = showBackupSheet;
   if ($('#choosePlain')) $('#choosePlain').onclick = () => showVersionPicker(plainFigs()[0].setNum);
   $('#addBtn').onclick = () => {
     if (figs) { resetFigAdd(); go('#addfig'); return; }
-    if (accountGate(() => go('#add'))) go('#add');
+    go('#add'); // the account is asked for once they've found their set
   };
   bindFigHints();
   document.querySelectorAll('#collection button').forEach((b) => {
@@ -1616,9 +1637,12 @@ function renderAdd() {
   input.focus();
   const submit = async () => {
     const num = normaliseSetNum(input.value);
-    if (!num) return toast('Enter a set number');
+    if (!num) {
+      $('#addStatus').innerHTML = '<p class="form-error" role="alert">Type the set number first. It\'s on the front of the box or manual.</p>';
+      input.focus();
+      return;
+    }
     if (state.sets[num]) return go('#set/' + encodeURIComponent(num));
-    if (!accountGate(() => submit())) return;
     const btn = $('#fetchBtn');
     btn.disabled = true;
     $('#addStatus').innerHTML = '<div class="spinner"></div><p class="center muted">Finding set…</p>';
@@ -1638,7 +1662,7 @@ function renderAdd() {
           <p></p>
           <button class="btn block" id="addNo">No, change the number</button>
         </div>`;
-      $('#addYes').onclick = () => {
+      const addIt = () => {
         if (state.sets[set.setNum]) return go('#set/' + encodeURIComponent(set.setNum));
         if (mode === 'most') set.parts.forEach((p) => { p.have = p.qty; });
         set.addedAt = Date.now();
@@ -1647,6 +1671,15 @@ function renderAdd() {
         ui.setFilter = mode === 'most' ? 'all' : 'missing';
         location.replace('#set/' + encodeURIComponent(set.setNum));
         if (mode === 'most') toast('Now untick the pieces that are missing');
+      };
+      // Your second item: "Save this set" with its picture, rather than a wall before you start.
+      $('#addYes').onclick = () => {
+        if (state.sets[set.setNum] || accountGate(addIt, {
+          title: `Save ${esc(set.name)}: create a free account`,
+          text: 'Your first set is free without an account. A free account saves this one too, backs up everything, and lets you add as many sets and minifigures as you like.',
+          pic: set.img ? `<img src="${esc(set.img)}" alt="">` : '',
+          keep: true,
+        })) addIt();
       };
       $('#addNo').onclick = () => {
         $('#addStatus').innerHTML = '';
@@ -3288,7 +3321,7 @@ function renderSet(setNum) {
           </div>
           ${(set.count || 1) > 1 ? `<span class="muted small">${figsComplete(set)} of ${set.count} complete</span>` : ''}
         </div>` : ''}
-        <button class="btn small value-btn" id="valueBtn">${hasValue(set) ? `💷 ${money(set.value)} · edit` : '💷 Add value'}</button>
+        <button class="btn small value-btn" id="valueBtn">${hasValue(set) ? `💷 ${money(set.value)} · edit` : '💷 Add resale value (£)'}</button>
       </div>
     </div>
     ${isFig(set) ? renderFigSets(set) + (set.plain ? '' : '<p class="center small"><button class="link-btn" id="changeVersion">Wrong version? Change it</button></p>') : renderSetFigs(set) + renderMovedFigs(set)}
@@ -4475,7 +4508,7 @@ function renderSettings() {
   };
 }
 
-function renderAccountCard() {
+function renderAccountCard(opts = {}) {
   const card = $('#accountCard');
   if (!card) return;
   if (session) {
@@ -4515,32 +4548,54 @@ function renderAccountCard() {
     };
     return;
   }
+  // Two clear modes: Create account (with the agreement box above the button) or Log in.
+  const inGate = !!card.closest('.gate');
+  const mode = opts.mode || card.dataset.mode || (loadPref('pendingEmail', '') || !inGate ? 'login' : 'create');
+  card.dataset.mode = mode;
+  const create = mode === 'create';
+  const keep = { email: $('#email')?.value ?? loadPref('pendingEmail', ''), password: $('#password')?.value || '' };
   card.innerHTML = `
-    <h2>☁️ Account &amp; backup</h2>
-    <p class="small">Log in to back up your sets online and use them on your other devices.</p>
-    ${loadPref('pendingEmail', '') ? `<p class="small notice-ok">📧 Confirmed your email? Log in below with <b>${esc(loadPref('pendingEmail', ''))}</b> and your password.</p>` : ''}
-    <input class="field" id="email" type="email" autocomplete="email" autocapitalize="off" placeholder="Email address" value="${esc(loadPref('pendingEmail', ''))}">
-    <p></p>
-    <input class="field" id="password" type="password" autocomplete="current-password" placeholder="Password">
-    <p></p>
-    <div class="row">
-      <button class="btn primary grow" id="loginBtn">Log in</button>
-      <button class="btn grow" id="registerBtn">Create account</button>
+    ${inGate ? '' : `<h2>☁️ Account &amp; backup</h2>
+    <p class="small">Back up your sets online and use them on your other devices.</p>`}
+    <div class="seg auth-tabs" role="tablist">
+      <button role="tab" aria-selected="${create}" class="${create ? 'active' : ''}" data-auth="create">Create account</button>
+      <button role="tab" aria-selected="${!create}" class="${create ? '' : 'active'}" data-auth="login">Log in</button>
     </div>
+    ${!create && loadPref('pendingEmail', '') ? `<p class="small notice-ok">📧 Confirmed your email? Log in below with <b>${esc(loadPref('pendingEmail', ''))}</b> and your password.</p>` : ''}
+    <label class="lbl" for="email">Email address</label>
+    <input class="field" id="email" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" value="${esc(keep.email)}" aria-describedby="emailErr">
+    <p class="form-error" id="emailErr" role="alert"></p>
+    <label class="lbl" for="password">Password${create ? ' <span class="muted small">(at least 6 characters)</span>' : ''}</label>
+    <input class="field" id="password" type="password" autocomplete="${create ? 'new-password' : 'current-password'}" value="${esc(keep.password)}" aria-describedby="passwordErr">
+    <p class="form-error" id="passwordErr" role="alert"></p>
+    ${create ? `
     <label class="agree small">
-      <input type="checkbox" id="agree">
-      <span>New account? Please confirm: I'm 13 or over and agree to the <a href="terms.html">Terms of Use</a> and <a href="privacy.html">Privacy Policy</a>.</span>
+      <input type="checkbox" id="agree" aria-describedby="agreeErr">
+      <span>I'm 13 or over and agree to the <a href="terms.html">Terms of Use</a> and <a href="privacy.html">Privacy Policy</a>.</span>
     </label>
-    <p class="small" style="margin-top:12px"><a href="#" id="forgotPw">Forgot password?</a></p>
+    <p class="form-error" id="agreeErr" role="alert"></p>` : ''}
+    <p class="form-error" id="authErr" role="alert"></p>
+    <button class="btn primary block" id="${create ? 'registerBtn' : 'loginBtn'}">${create ? 'Create free account' : 'Log in'}</button>
+    ${create ? '' : '<p class="small" style="margin-top:12px"><a href="#" id="forgotPw">Forgot password?</a></p>'}
     <p class="muted small">Your email and sets are stored securely and only you can see them.</p>`;
+  card.querySelectorAll('[data-auth]').forEach((b) => { b.onclick = () => renderAccountCard({ mode: b.dataset.auth }); });
+  const showErr = (id, msg) => {
+    const el = $('#' + id);
+    if (el) el.textContent = msg || '';
+    const field = { emailErr: '#email', passwordErr: '#password' }[id];
+    if (field && $(field)) $(field).setAttribute('aria-invalid', msg ? 'true' : 'false');
+    if (msg && field && $(field)) $(field).focus();
+  };
+  const clearErrs = () => ['emailErr', 'passwordErr', 'agreeErr', 'authErr'].forEach((id) => showErr(id, ''));
   const creds = () => {
+    clearErrs();
     const email = $('#email').value.trim(), password = $('#password').value;
-    if (!/^\S+@\S+\.\S+$/.test(email)) { toast('Enter your email address'); return null; }
-    if (password.length < 6) { toast('Password must be at least 6 characters'); return null; }
+    if (!/^\S+@\S+\.\S+$/.test(email)) { showErr('emailErr', email ? "That doesn't look like an email address" : 'Enter your email address'); return null; }
+    if (password.length < 6) { showErr('passwordErr', password ? 'Your password needs at least 6 characters' : 'Enter a password'); return null; }
     return { email, password };
   };
-  const busy = (on) => { $('#loginBtn').disabled = $('#registerBtn').disabled = on; };
-  $('#loginBtn').onclick = async () => {
+  const busy = (on) => { const b = $('#loginBtn') || $('#registerBtn'); if (b) b.disabled = on; };
+  if ($('#loginBtn')) $('#loginBtn').onclick = async () => {
     const c = creds();
     if (!c) return;
     busy(true);
@@ -4548,13 +4603,13 @@ function renderAccountCard() {
       await logIn(c.email, c.password);
       savePref('pendingEmail', '');
       authDone('Logged in — your sets are backed up');
-    } catch (e) { toast(e.message); busy(false); }
+    } catch (e) { showErr('authErr', e.message); busy(false); }
   };
-  $('#registerBtn').onclick = async () => {
+  if ($('#registerBtn')) $('#registerBtn').onclick = async () => {
     const c = creds();
     if (!c) return;
     if (!$('#agree').checked) {
-      toast("Please tick the box to confirm you're 13 or over and agree to the terms");
+      showErr('agreeErr', "Please tick the box to confirm you're 13 or over and agree to the terms");
       $('.agree').classList.add('need');
       return;
     }
@@ -4568,6 +4623,8 @@ function renderAccountCard() {
       } else {
         busy(false);
         savePref('pendingEmail', c.email);
+        // Keep what they were saving (e.g. the set) while they confirm their email.
+        if (gateKeep && afterAuth) { const next = afterAuth; afterAuth = null; gateKeep = false; next(); }
         mailSheet({
           title: 'Check your email', lead: "We've sent a link to", email: c.email,
           steps: [
@@ -4578,13 +4635,13 @@ function renderAccountCard() {
           foot: "Can't find it? Check your spam folder.",
         });
       }
-    } catch (e) { toast(e.message); busy(false); }
+    } catch (e) { showErr('authErr', e.message); busy(false); }
   };
-  $('#password').onkeydown = (e) => { if (e.key === 'Enter') $('#loginBtn').click(); };
-  $('#forgotPw').onclick = async (e) => {
+  $('#password').onkeydown = (e) => { if (e.key === 'Enter') ($('#loginBtn') || $('#registerBtn')).click(); };
+  if ($('#forgotPw')) $('#forgotPw').onclick = async (e) => {
     e.preventDefault();
     const email = $('#email').value.trim();
-    if (!/^\S+@\S+\.\S+$/.test(email)) return toast('Type your email address first');
+    if (!/^\S+@\S+\.\S+$/.test(email)) return showErr('emailErr', 'Type your email address first, then tap Forgot password');
     try {
       await sbFetch('/auth/v1/recover?redirect_to=' + encodeURIComponent(appUrl()), { method: 'POST', body: { email } });
       mailSheet({

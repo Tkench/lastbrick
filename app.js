@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.11.1';
 const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -1645,8 +1645,8 @@ async function loadAllSets() {
       num, name, year, pieces,
       theme: path.join(' › '),
       img: pic === 1 ? `${RB_MEDIA}sets/${num}.jpg` : pic ? RB_MEDIA + pic : '',
-      nameL: ' ' + name.toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ',
-      themeL: ' ' + path.join(' ').toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ',
+      nameL: ' ' + name.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ') + ' ',
+      themeL: ' ' + path.join(' ').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ') + ' ',
     };
   });
   return allSetsData;
@@ -1655,7 +1655,7 @@ async function loadAllSets() {
 // Every word must match the start of a word in the name or theme; a year like 1989
 // narrows to that year. Name matches rank first, then bigger sets.
 function searchSets(data, query) {
-  const words = query.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  const words = query.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
   const years = words.filter((w) => /^(19[4-9]\d|20\d\d)$/.test(w)).map(Number);
   const terms = words.filter((w) => !/^(19[4-9]\d|20\d\d)$/.test(w));
   const out = [];

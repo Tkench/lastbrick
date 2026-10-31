@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.10.0';
+const APP_VERSION = '1.10.1';
 const APP_DATE = '2026-10-30';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -851,6 +851,19 @@ function basePartNum(id) {
 }
 
 // Find every missing entry (across all sets) that matches a recognised part id.
+// Parts matching a scanned id in your sets where you've already found them all.
+function findCompleteMatches(id) {
+  const want = String(id).toLowerCase();
+  const out = [];
+  for (const set of sortedSets()) {
+    for (const p of set.parts) {
+      if (p.have < p.qty) continue;
+      if ([p.partNum, ...(p.altIds || [])].some((x) => x.toLowerCase() === want)) out.push({ set, p });
+    }
+  }
+  return out;
+}
+
 function findMissingMatches(id) {
   const want = String(id).toLowerCase();
   const wantBase = basePartNum(id);
@@ -989,6 +1002,15 @@ function closeSheet() {
   $('#sheet').innerHTML = '';
 }
 
+/* Screen readers: toggles (Mostly complete / Start from zero, Missing / Have / All,
+ * Sets / Minifigures, views, chips) say which one is selected. */
+new MutationObserver(() => {
+  document.querySelectorAll('.seg button:not([role="tab"]), .view-toggle button, .chips .chip').forEach((b) => {
+    const on = b.classList.contains('active') ? 'true' : 'false';
+    if (b.getAttribute('aria-pressed') !== on) b.setAttribute('aria-pressed', on);
+  });
+}).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+
 /* ---------- Routing ---------- */
 
 function route() {
@@ -1032,12 +1054,16 @@ function render() {
 function setTitle(t) {
   document.body.classList.remove('welcome');
   $('#title').textContent = t;
+  $('#title').removeAttribute('role');
+  document.title = `${t} – Last Brick`;
 }
 
 // Welcome page header: logo + "Last" in black, "Brick" in red.
 function setWelcomeHeader() {
   document.body.classList.add('welcome');
   $('#title').innerHTML = setWelcomeHeaderArt();
+  $('#title').setAttribute('role', 'presentation'); // the welcome headline is the page heading
+  document.title = 'Last Brick – turn your box of mixed LEGO® back into sets';
 }
 
 // Last Brick logo art: a stepped stack of bricks with the red "last brick"
@@ -1171,7 +1197,7 @@ function renderWelcome() {
   $('#view').innerHTML = `
     <div class="welcome-first">
     <section class="hero welcome-hero">
-      <h2 class="hero-title">Got a box of mixed LEGO®?<br><span class="accent">Your old sets are still in&nbsp;there.</span></h2>
+      <h1 class="hero-title">Got a box of mixed LEGO®?<br><span class="accent">Your old sets are still in&nbsp;there.</span></h1>
       <p class="hero-sub">Pick one to try now. It's free.</p>
     </section>
     ${needsOwnKey() ? `<div class="card">
@@ -2630,13 +2656,13 @@ function renderFigOut() {
   const h = renderFigOutInner();
   const a = figAdd;
   const showLink = syncEnabled() && a.photoUrl && !a.loading && (a.step || a.error);
-  return h + (showLink ? reportLink('data-report-fig') : '');
+  return h + (showLink ? reportLink('data-report-fig', a.error ? "Couldn't find it? Tell us" : 'Wrong match? Tell us') : '');
 }
 
 function renderFigOutInner() {
   const a = figAdd;
   let h = '';
-  if (a.loading) return h + `<p class="center scan-status">${esc(a.loading)}</p>`;
+  if (a.loading) return h + `<p class="center scan-status" role="status">${esc(a.loading)}</p>`;
   if (a.error) {
     return h + `<div class="verdict-card no"><span class="verdict-ico">${a.errorIcon || '⚠️'}</span><div><b>${esc(a.errorTitle || 'Something went wrong')}</b><span>${esc(a.error)}</span></div></div>`;
   }
@@ -2645,7 +2671,7 @@ function renderFigOutInner() {
     h += `<h3 class="steps-title">Which ${what} is it?</h3><p class="muted small">Tap the one that looks like yours.</p>`;
     const best = a.guesses[0]?.score || 0;
     if (best && best < 0.6) {
-      h += `<div class="verdict-card no"><span class="verdict-ico">🤔</span><div><b>The scanner isn't sure (${Math.round(best * 100)}%)</b><span>Check the other guesses below, or try another photo: closer up, on plain paper, in good light.</span></div></div>`;
+      h += `<div class="verdict-card no"><span class="verdict-ico">🤔</span><div><b>The scanner isn't sure (${Math.round(best * 100)}%)</b><span>Check the other guesses below, or try another photo: on white paper, in daylight.</span></div></div>`;
     }
     h += a.guesses.map((g, i) => `
       <button class="match-card guess" data-guess="${i}">
@@ -2782,8 +2808,7 @@ function renderAddFig() {
       <button class="scan-opt" id="scanFig"><span class="opt-ico">${scanFigIcon()}</span><b>Scan whole figure</b><span>Stand it up on plain paper</span></button>
       <button class="scan-opt" id="scanPiece"><span class="opt-ico">${scanHeadIcon()}</span><b>Scan one piece</b><span>Legs, torso, head…</span></button>
     </div>
-    <h3 class="steps-title">Tips for a good match</h3>
-    ${swipeCards('figTips', FIG_TIPS)}`;
+    ${tipList(FIG_TIPS)}`;
   bindAddFig();
   bindSwipeCards('figTips');
 }
@@ -3141,7 +3166,7 @@ $('#figCameraInput').addEventListener('change', async (e) => {
     const found = await identifyPiece(file, kind === 'fig' ? BRICKOGNIZE_FIGS : BRICKOGNIZE_API);
     await zoomPhoto(figAdd, found.box);
     const items = found.items.slice(0, 4);
-    if (!items.length) return noFigs(`Couldn't recognise that ${kind === 'fig' ? 'figure' : 'piece'}`, 'Try again closer up, on a plain background, or search by name.');
+    if (!items.length) return noFigs(`Couldn't recognise that ${kind === 'fig' ? 'figure' : 'piece'}`, kind === 'fig' ? 'Try again: stand the figure on white paper in daylight, facing the front. Or scan just its torso, which usually points to one or two figures.' : 'Try again on white paper, in daylight, with the printed side showing. A printed torso works best.');
     Object.assign(figAdd, { step: 'guesses', guesses: items, autoPicked: false });
     // A confident whole-figure guess goes straight to the matches (one list, not two).
     const [top, next] = items;
@@ -3172,9 +3197,9 @@ function showSetPartSheet(setNum, key, onChange) {
         <div class="meta muted">${swatch(p.rgb)} ${esc(p.colorName)} · part #${esc(p.partNum)}</div>
         <p>${missing ? `<span class="badge miss">need ${missing} more</span>` : '<span class="badge ok">Got them all ✓</span>'}</p>
         <div class="counter big">
-          <button data-step="-1" aria-label="One less">−</button>
-          <span class="count">${p.have}<span class="of"> / ${p.qty} found</span></span>
-          <button data-step="1" aria-label="One more">+</button>
+          <button data-step="-1" aria-label="One less: ${esc(p.name)}, ${esc(p.colorName)}">−</button>
+          <span class="count" role="status">${p.have}<span class="of"> / ${p.qty} found</span></span>
+          <button data-step="1" aria-label="One more: ${esc(p.name)}, ${esc(p.colorName)}">+</button>
         </div>
         <p class="small"><a href="https://rebrickable.com/parts/${encodeURIComponent(p.partNum)}/" target="_blank" rel="noopener">More pictures on Rebrickable ↗</a></p>
         <button class="btn block" data-close>Done</button>
@@ -3230,9 +3255,9 @@ function renderPartItems(items) {
           ${missing ? `<span class="badge miss">need ${missing}</span>` : '<span class="badge ok">Got them ✓</span>'}
         </div>
         <div class="counter vertical">
-          <button data-act="plus" aria-label="One more">+</button>
+          <button data-act="plus" aria-label="One more: ${esc(p.name)}, ${esc(p.colorName)}">+</button>
           <span class="count">${p.have}<span class="of">/${p.qty}</span></span>
-          <button data-act="minus" aria-label="One less">−</button>
+          <button data-act="minus" aria-label="One less: ${esc(p.name)}, ${esc(p.colorName)}">−</button>
         </div>
       </div>`;
     }).join('')}</div>`;
@@ -3250,9 +3275,9 @@ function renderPartItems(items) {
             <div class="meta">${swatch(p.rgb)} ${esc(p.colorName)} · ${esc(p.partNum)}${p.acc ? ' <span class="acc-tag">accessory</span>' : ''}</div>
           </div>
           <div class="counter">
-            <button data-act="minus" aria-label="One less">−</button>
+            <button data-act="minus" aria-label="One less: ${esc(p.name)}, ${esc(p.colorName)}">−</button>
             <span class="count">${p.have}<span class="of"> / ${p.qty}</span></span>
-            <button data-act="plus" aria-label="One more">+</button>
+            <button data-act="plus" aria-label="One more: ${esc(p.name)}, ${esc(p.colorName)}">+</button>
           </div>
         </div>`;
   }).join('')}</div>`;
@@ -3671,7 +3696,7 @@ function renderMissing() {
 }
 
 // "− 1/2 +" for one set's piece, on Looking for and in its details panel.
-const lfCounter = (p) => `<span class="cnt"><button data-lfc="minus" aria-label="One less">−</button><b>${p.have}<small>/${p.qty}</small></b><button data-lfc="plus" aria-label="One more">+</button></span>`;
+const lfCounter = (p, set) => `<span class="cnt"><button data-lfc="minus" aria-label="One less: ${esc(p.name)}, ${esc(p.colorName)}${set ? ' for ' + esc(set.name) : ''}">−</button><b>${p.have}<small>/${p.qty}</small></b><button data-lfc="plus" aria-label="One more: ${esc(p.name)}, ${esc(p.colorName)}${set ? ' for ' + esc(set.name) : ''}">+</button></span>`;
 
 function renderMissingItems(items) {
   if (ui.missingView === 'grid') {
@@ -3690,7 +3715,7 @@ function renderMissingItems(items) {
           ${sets.map((s) => { const p = s.set.parts.find((x) => x.key === g.key); return `
             <div class="lf-set" data-set="${esc(s.set.setNum)}">
               <span class="sname">${esc(s.set.name)} <span class="muted">#${esc(shortSetNum(s.set.setNum))}</span></span>
-              ${lfCounter(p)}
+              ${lfCounter(p, s.set)}
             </div>`; }).join('')}
         </div>
       </div>`).join('')}</div>`;
@@ -3815,7 +3840,7 @@ function showPartSheet(key) {
       <div class="for-set lf-set" data-set="${esc(s.set.setNum)}">
         <span class="thumb">${setPic(s.set)}</span>
         <span class="sname"><b>${esc(s.set.name)}</b><br><span class="muted small">#${esc(shortSetNum(s.set.setNum))}</span></span>
-        ${lfCounter(s.set.parts.find((x) => x.key === key))}
+        ${lfCounter(s.set.parts.find((x) => x.key === key), s.set)}
       </div>`).join('')}
     <p class="small"><a href="https://rebrickable.com/parts/${encodeURIComponent(p.partNum)}/" target="_blank" rel="noopener">More pictures on Rebrickable ↗</a></p>
     <button class="btn block" data-close>Close</button>`);
@@ -3902,6 +3927,13 @@ const TIP_ART = {
   </svg>`,
 };
 
+// Tips as a short checklist (easier to take in than cards you have to swipe).
+const tipList = (tips) => `
+  <div class="tip-list">
+    <h3 class="steps-title">Tips for a good match</h3>
+    <ul>${tips.map(([, t, d]) => `<li><b>${t}</b> ${d}</li>`).join('')}</ul>
+  </div>`;
+
 const SCAN_TIPS = [
   [TIP_ART.one, 'One piece only', 'Put a single piece in the photo. It doesn\'t need to fill the frame: the app zooms in on it for you.'],
   [TIP_ART.paper, 'Plain background', 'A sheet of white paper is perfect, so the piece stands out.'],
@@ -3920,9 +3952,8 @@ function renderScan() {
         <p class="hero-sub">Take a photo of one piece and Last Brick works out what it is, and which of your sets needs it.</p>
       </section>
       <button class="btn primary block hero-cta" id="snap">${scanIcon({ onRed: true, cls: 'scan-ico btn-ico' })} Scan a piece</button>
-      <p class="center small hero-login">Know the part number? <a href="#missing">Search your list</a></p>
-      <h3 class="steps-title">Tips for a good match</h3>
-      ${swipeCards('scanTips', SCAN_TIPS)}`;
+      <p class="center small hero-login">Know the part number? <a href="#missing">Search Looking for</a></p>
+      ${tipList(SCAN_TIPS)}`;
   } else {
     html += `
       <div class="scan-shot ${scanState.loading ? 'scanning' : ''}">
@@ -3931,13 +3962,13 @@ function renderScan() {
         ${scanState.loading ? '<span class="shot-line"></span>' : ''}
       </div>`;
     if (scanState.loading) {
-      html += `<p class="center scan-status">Working out which piece this is…</p>`;
+      html += `<p class="center scan-status" role="status">Working out which piece this is…</p>`;
     } else if (scanState.error) {
       html += `<div class="verdict-card no"><span class="verdict-ico">⚠️</span><div><b>Something went wrong</b><span>${esc(scanState.error)} You can still search the <a href="#missing">Looking for</a> list.</span></div></div>`;
     } else {
       html += renderScanResults(scanState.items);
     }
-    if (!scanState.loading && syncEnabled()) html += reportLink('id="reportScan"');
+    if (!scanState.loading && syncEnabled()) html += reportLink('id="reportScan"', scanState.error || !(scanState.items || []).length ? "Couldn't find it? Tell us" : 'Wrong match? Tell us');
     if (!scanState.loading) html += `<button class="btn primary block hero-cta scan-again" id="snap">${scanIcon({ onRed: true, cls: 'scan-ico btn-ico' })} Scan another piece</button>`;
   }
   $('#view').innerHTML = html;
@@ -3954,18 +3985,21 @@ function renderScan() {
 
 function renderScanResults(items) {
   if (!items.length) {
-    return `<div class="verdict-card no"><span class="verdict-ico">🤔</span><div><b>Couldn't recognise that piece</b><span>Try again closer up, on a plain background — or search the <a href="#missing">Looking for</a> list.</span></div></div>`;
+    return `<div class="verdict-card no"><span class="verdict-ico">🤔</span><div><b>Couldn't recognise that piece</b><span>Try again on white paper, in daylight, with the studs or printed side showing. Or search the <a href="#missing">Looking for</a> list.</span></div></div>`;
   }
-  const top = items.slice(0, 4);
+  const top = items.slice(0, 3);
   const results = top.map((it) => ({ it, ...findMissingMatches(it.id) }));
   const anyHit = results.some((r) => r.exact.length || r.similar.length);
+  // Not missing anywhere, but part of a set you have? Say so, rather than just "not on your list".
+  const done = anyHit ? [] : findCompleteMatches(top[0].id);
   let html = anyHit
     ? `<div class="verdict-card yes"><span class="verdict-ico">✅</span><div><b>Yes — you're looking for this!</b><span>Pick the set that matches your piece's colour and tap Add.</span></div></div>`
-    : `<div class="verdict-card no"><span class="verdict-ico">🔎</span><div><b>Not on your missing list</b><span>Check the best guess looks right. If it doesn't, try another photo.</span></div></div>`;
+    : done.length
+    ? `<div class="verdict-card yes"><span class="verdict-ico">👍</span><div><b>You already have all of these</b><span>${done.slice(0, 3).map((d) => `In ${esc(d.set.name)}: you have all ${d.p.qty} (${esc(d.p.colorName)})`).join('<br>')}</span></div></div>`
+    : `<div class="verdict-card no"><span class="verdict-ico">🔎</span><div><b>Not on your Looking for list</b><span>None of your sets need this piece. Check the best guess looks right; the other guesses are below.</span></div></div>`;
 
   results.forEach((r, i) => {
     const hits = [...r.exact, ...r.similar];
-    if (i > 0 && !hits.length) return; // only show alternative guesses that matter
     const score = Math.round((r.it.score || 0) * 100);
     html += `
       <div class="match-card ${hits.length ? 'hit' : ''}">
@@ -4701,7 +4735,7 @@ async function renderDemo() {
     <h3 class="steps-title">Still missing</h3>
     ${missing.length ? grid : `<div class="empty"><div class="big">🎉</div>You found everything! That's how it feels.</div>`}
     <div class="demo-cta">
-      <button class="btn primary block" id="demoAdd">Add my own set</button>
+      <button class="btn primary block" id="demoAdd">Add a set</button>
       <button class="btn block" id="demoFig">${scanFigIcon('scan-ico btn-ico')} Who's this minifigure?</button>
     </div>`;
   $('#view').querySelectorAll('.pitem').forEach((el) => {

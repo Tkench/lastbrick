@@ -22,8 +22,8 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.11.5';
-const APP_DATE = '2026-10-30';
+const APP_VERSION = '1.12.0';
+const APP_DATE = '2026-11-01';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
 // Cloudflare Web Analytics (cookie-free visitor stats). Paste the site's token here
@@ -195,6 +195,27 @@ async function logIn(email, password) {
   await syncNow({ loud: true });
 }
 
+// Sends the "Confirm your email" email again (for accounts not confirmed yet).
+async function resendConfirmation(email) {
+  await sbFetch('/auth/v1/resend?redirect_to=' + encodeURIComponent(appUrl()), { method: 'POST', body: { type: 'signup', email } });
+}
+// A "Resend" button: sends it and says what happened, in place.
+function bindResend(btn, email) {
+  if (!btn) return;
+  btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      await resendConfirmation(email);
+      const done = `<span class="resent">✓ Sent again to ${esc(email)}. Check your inbox and spam folder.</span>`;
+      const row = btn.closest('p'); // replace "Didn't get the email? Resend" as a whole
+      if (row) row.innerHTML = done; else btn.outerHTML = done;
+    } catch (e) {
+      btn.disabled = false; btn.textContent = 'Resend confirmation email';
+      toast(/rate|seconds|too many/i.test(e.message) ? 'Please wait a minute before sending it again' : e.message);
+    }
+  };
+}
+
 // Returns true when logged straight in, false when an email confirmation is needed.
 async function register(email, password) {
   const data = await sbFetch('/auth/v1/signup?redirect_to=' + encodeURIComponent(appUrl()), { method: 'POST', body: { email, password } });
@@ -353,18 +374,51 @@ function accountGate(then = () => render(), reason = null) {
 }
 
 // "Saved on this phone only · Create a free account": the same panel, without a wall.
-function showBackupSheet() {
+function showBackupSheet(reason = null) {
   openSheet(`
     <div class="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
       <button class="sheet-x" data-close aria-label="Close">✕</button>
-      ${brandArt({ cls: 'gate-art' })}
-      <h2 id="gateTitle">Back up your sets</h2>
-      <p class="muted">At the moment your sets are saved on this phone only. A free account backs them up, keeps them safe if you lose or change your phone, and lets you add as many as you like.</p>
+      ${reason && reason.pic ? `<div class="gate-pic">${reason.pic}</div>` : brandArt({ cls: 'gate-art' })}
+      <h2 id="gateTitle">${reason ? reason.title : 'Back up your sets'}</h2>
+      <p class="muted">${reason ? reason.text : 'At the moment your sets are saved on this phone only. A free account backs them up, keeps them safe if you lose or change your phone, and lets you add as many as you like.'}</p>
       <div id="accountCard" class="gate-card"></div>
     </div>`);
   gateKeep = false;
   afterAuth = () => { closeSheet(); render(); };
   renderAccountCard({ mode: 'create' });
+}
+
+// Straight after a guest's first set or minifigure: "Save your Fire Truck".
+// Shown once per device; "Maybe later" carries on, and adding a second item
+// still asks (the existing prompt).
+function firstItemPrompt(item) {
+  if (!syncEnabled() || session || loadPref('firstPrompt', '') || Object.keys(state.sets).length !== 1) return;
+  savePref('firstPrompt', 'shown');
+  const name = String(item.name).split(',')[0];
+  const pic = item.img ? `<img src="${esc(item.img)}" alt="">` : '';
+  const text = `Save your ${esc(name)} and its missing-pieces list. Create a free account so it's here next time, on any device.`;
+  setTimeout(() => {
+    if (session || !$('#sheet').classList.contains('hidden')) return;
+    funnelStep('first_prompt');
+    openSheet(`
+      <div class="gate first-prompt" role="dialog" aria-modal="true" aria-labelledby="fpTitle">
+        <button class="sheet-x" id="fpX" aria-label="Maybe later">✕</button>
+        ${pic ? `<div class="gate-pic">${pic}</div>` : brandArt({ cls: 'gate-art' })}
+        <h2 id="fpTitle">Save your ${esc(name)}</h2>
+        <p class="muted">${text}</p>
+        <button class="btn primary block" id="fpCreate">Create free account</button>
+        <button class="btn block" id="fpLater">Maybe later</button>
+        <p class="made-by small">Built by <a href="about.html">Tracey</a>, a LEGO fan in the UK. No spam, no tracking, delete any time.</p>
+      </div>`);
+    const later = () => { funnelStep('first_prompt_later'); closeSheet(); };
+    $('#fpLater').onclick = later;
+    $('#fpX').onclick = later;
+    $('#fpCreate').onclick = () => {
+      funnelStep('first_prompt_create');
+      savePref('regFrom', 'first_prompt');
+      showBackupSheet({ title: `Save your ${esc(name)}`, text, pic });
+    };
+  }, 900);
 }
 
 function authDone(message) {
@@ -983,7 +1037,7 @@ const MAIL_ART = {
 const PHONE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18h3"/></svg>';
 
 // steps: [[html, smallPrint?, icon?], …] (numbered 1, 2, 3 unless an icon is given)
-function mailSheet({ art = 'mail', title, lead = '', email = '', steps = [], button = 'Got it', foot = '' }) {
+function mailSheet({ art = 'mail', title, lead = '', email = '', steps = [], button = 'Got it', foot = '', resend = '' }) {
   openSheet(`<div class="mail-sheet">
     ${MAIL_ART[art]}
     <h2>${title}</h2>
@@ -993,7 +1047,9 @@ function mailSheet({ art = 'mail', title, lead = '', email = '', steps = [], but
       `<li><span class="n">${icon || i + 1}</span><span>${text}${small ? `<small>${small}</small>` : ''}</span></li>`).join('')}</ol>` : ''}
     <button class="btn primary block" data-close>${button}</button>
     ${foot ? `<p class="foot">${foot}</p>` : ''}
+    ${resend ? '<p class="foot">Didn\'t get the email? <button class="link-btn" id="mailResend">Resend</button></p>' : ''}
   </div>`);
+  if (resend) bindResend($('#mailResend'), resend);
 }
 
 function closeSheet() {
@@ -1063,7 +1119,7 @@ function setWelcomeHeader() {
   document.body.classList.add('welcome');
   $('#title').innerHTML = setWelcomeHeaderArt();
   $('#title').setAttribute('role', 'presentation'); // the welcome headline is the page heading
-  document.title = 'Last Brick – turn your box of mixed LEGO® back into sets';
+  document.title = 'Last Brick: find missing LEGO® pieces and rebuild your sets';
 }
 
 // Last Brick logo art: a stepped stack of bricks with the red "last brick"
@@ -1173,6 +1229,16 @@ function scanHeadIcon(cls = 'scan-ico') {
   </svg>`;
 }
 
+// A brick outline with a red "?", for "See exactly what's missing".
+function missingIcon(cls = 'scan-ico') {
+  return `<svg class="${cls}" viewBox="0 0 28 26" aria-hidden="true">
+    ${[0, 1, 2].map((i) => `<rect x="${5.2 + i * 5.2}" y="6" width="3.4" height="2.6" rx=".8" fill="none" stroke="#9aa0a8" stroke-width="1" stroke-dasharray="1.6 1.2"/>`).join('')}
+    <rect x="3.5" y="8.2" width="18" height="11" rx="1.6" fill="none" stroke="#9aa0a8" stroke-width="1.2" stroke-dasharray="2 1.4"/>
+    <circle cx="21.5" cy="18.5" r="5.6" fill="#d01012" stroke="#fff" stroke-width="1.4"/>
+    <text x="21.5" y="21.4" text-anchor="middle" font-size="8.5" font-weight="800" fill="#fff" font-family="Arial, sans-serif">?</text>
+  </svg>`;
+}
+
 // A red brick with a green tick, for "Tick what you have".
 function tickBrickIcon(cls = 'scan-ico') {
   const [f, e] = BRICK_COLOURS.r;
@@ -1186,10 +1252,9 @@ function tickBrickIcon(cls = 'scan-ico') {
 
 // The steps on the welcome page, in the same order as its two buttons.
 const HOW_IT_WORKS = () => [
-  [scanIcon({ cls: 'scan-ico big' }), 'Add your sets', 'Type the number from the box or manual and the full parts list appears.'],
-  [tickBrickIcon('scan-ico big'), 'Tick what you have', 'See exactly which pieces are still missing, in every colour.'],
-  [scanHeadIcon('scan-ico big'), 'Find and scan pieces', 'Spot a piece in the pile? Scan it to see which of your sets needs it.'],
-  [scanFigIcon('scan-ico big'), 'Scan a minifigure', 'Snap a photo to find out who it is and which set it came from.'],
+  [scanIcon({ cls: 'scan-ico big' }), 'Add a set', 'Type the number from the box or manual (or search by name), or scan a piece from your pile.'],
+  [tickBrickIcon('scan-ico big'), "Tick off what you've found", 'Tap + as you find each piece. A nearly complete set? Tick everything, then untick the gaps.'],
+  [missingIcon('scan-ico big'), "See exactly what's missing", 'Every missing piece, with a picture and colour, across all your sets in Looking for.'],
 ];
 
 function renderWelcome() {
@@ -1233,8 +1298,8 @@ function renderWelcome() {
     </div>
     <section class="welcome-how" id="how">
     ${swipeCards('steps', HOW_IT_WORKS())}
-    ${needsOwnKey() ? '' : `<button class="btn primary block hero-cta" id="tryNowSet">${scanIcon({ cls: 'scan-ico btn-ico', onRed: true })} Rebuild a set</button>
-    <button class="btn block hero-cta second" id="tryNow">${scanFigIcon('scan-ico btn-ico')} Who's this minifigure?</button>`}
+    ${needsOwnKey() ? '' : `<button class="btn primary block hero-cta" id="tryNowSet">${scanIcon({ cls: 'scan-ico btn-ico', onRed: true })} Add a set by number</button>
+    <button class="btn block hero-cta second" id="tryNow">${scanFigIcon('scan-ico btn-ico')} Scan a minifigure</button>`}
     </section>
     <footer class="welcome-foot small muted">
       <a href="about.html">About</a> · <a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Use</a>
@@ -1247,8 +1312,10 @@ function renderWelcome() {
     const seen = new IntersectionObserver((list) => { if (list.some((x) => x.isIntersecting)) { funnelStep('how'); seen.disconnect(); } }, { threshold: 0.4 });
     seen.observe($('#how'));
   }
-  if ($('#tryNow')) $('#tryNow').onclick = () => $('#startFig').click();
-  if ($('#tryNowSet')) $('#tryNowSet').onclick = () => $('#startBtn').click();
+  // The buttons under How it works count as Started, as on the welcome buttons
+  // (plus "how_start", to see how many start from How it works).
+  if ($('#tryNow')) $('#tryNow').onclick = () => { funnelStep('how_start'); $('#startFig').click(); };
+  if ($('#tryNowSet')) $('#tryNowSet').onclick = () => { funnelStep('how_start'); $('#startBtn').click(); };
   if ($('#startBtn')) {
     $('#startBtn').onclick = () => { funnelStep('start'); funnelStep('tap_set'); state.welcomed = true; save(); go('#add'); render(); };
     // Straight to the camera: the Add a minifigure page shows the answer.
@@ -1746,6 +1813,7 @@ function renderAdd() {
         ui.setFilter = mode === 'most' ? 'all' : 'missing';
         location.replace('#set/' + encodeURIComponent(set.setNum));
         if (mode === 'most') toast('Now untick the pieces that are missing');
+        firstItemPrompt(set);
       };
       // Your second item: "Save this set" with its picture, rather than a wall before you start.
       $('#addYes').onclick = () => {
@@ -2565,6 +2633,7 @@ async function savePlainCharacter(group, btn) {
   ui.collection = 'figs'; savePref('collection', 'figs'); ui.setFilter = 'missing';
   go('#set/' + encodeURIComponent(fig.setNum));
   toast(`Saved ${group.name}. Pick the exact version whenever you know it.`);
+  firstItemPrompt(fig);
 }
 
 // Choosing the version of a plain character: becomes that figure, ticks kept.
@@ -3227,6 +3296,7 @@ async function showFigPreview(figNum, picture = '', { forPlain = '' } = {}) {
       save();
       open();
       toast(`Added ${fig.name}`);
+      firstItemPrompt(fig);
     };
   }
 }
@@ -4254,16 +4324,46 @@ const reportLink = (id, text = 'Wrong match? Tell us') => `<p class="center repo
 // or the website that linked here, as a short name. Worked out once, on arrival.
 const VISIT_SOURCE = (() => {
   try {
-    const url = new URL(location.href);
     const clean = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 28);
+    // Read the link's tags ourselves, because apps and copy-paste mangle them:
+    // "&amp;" instead of "&", "&" sent as "%26", tags put after the "#", or
+    // Instagram adding its own utm_source=ig on top of ours. The first value of
+    // each tag wins, so our own tags beat ones added later.
+    const [hashPath, hashQuery = ''] = location.hash.split('?');
+    let raw = [location.search.slice(1), hashQuery].filter(Boolean).join('&').replace(/&amp;/gi, '&');
+    if (!/[&=]/.test(raw.replace(/^[^=]*=/, '')) && /%26|%3d/i.test(raw)) {
+      try { raw = decodeURIComponent(raw); } catch {}
+    }
+    const tags = {};
+    raw.split('&').forEach((pair) => {
+      const i = pair.indexOf('=');
+      const k = (i < 0 ? pair : pair.slice(0, i)).toLowerCase();
+      let v = i < 0 ? '' : pair.slice(i + 1).replace(/\+/g, ' ');
+      try { v = decodeURIComponent(v); } catch {}
+      if (k && !(k in tags)) tags[k] = v;
+    });
+    const alias = { ig: 'instagram', fb: 'facebook', yt: 'youtube', tt: 'tiktok' };
+    let src = clean(tags.ref || tags.utm_source);
+    src = alias[src] || src;
     // "?utm_source=facebook&utm_content=group3" is saved as "facebook/group3", so
     // each post or group can be told apart (and still adds up to "facebook").
-    const src = clean(url.searchParams.get('ref') || url.searchParams.get('utm_source'));
-    const detail = clean(url.searchParams.get('utm_content') || url.searchParams.get('utm_campaign'));
+    // Instagram's own "link_in_bio" only counts if we didn't name the link.
+    let detail = clean(tags.utm_content);
+    if (!detail || (detail === 'link_in_bio' && tags.utm_campaign)) detail = clean(tags.utm_campaign) || detail;
+    // No tags at all, but Facebook's or Instagram's click ID is there.
+    if (!src && 'fbclid' in tags) src = 'facebook';
+    if (!src && ('igsh' in tags || 'igshid' in tags)) src = 'instagram';
     const tag = src ? (detail ? `${src}/${detail}` : src) : '';
-    if (['ref', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content'].some((k) => url.searchParams.has(k))) {
-      ['ref', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].forEach((k) => url.searchParams.delete(k));
-      history.replaceState(null, '', url.pathname + url.search + url.hash); // tidy the address bar
+    // Tidy the address bar: take our tags (and the click IDs) back out.
+    const drop = ['ref', 'fbclid', 'igsh', 'igshid'];
+    if (Object.keys(tags).some((k) => drop.includes(k) || k.startsWith('utm_'))) {
+      const keep = (q) => q.split('&').filter((pair) => {
+        const k = pair.split('=')[0].toLowerCase().replace(/^amp;/, '');
+        return pair && !drop.includes(k) && !k.startsWith('utm_');
+      }).join('&');
+      const search = /%26|%3d/i.test(location.search) && /utm_/i.test(decodeURIComponent(location.search)) ? '' : keep(location.search.slice(1).replace(/&amp;/gi, '&'));
+      const hq = keep(hashQuery);
+      history.replaceState(null, '', location.pathname + (search ? '?' + search : '') + hashPath + (hq ? '?' + hq : ''));
     }
     if (tag) return tag;
     const host = new URL(document.referrer).hostname.toLowerCase().replace(/^(www|m|l|lm|mobile|out)\./, '');
@@ -4380,6 +4480,14 @@ function renderFunnel(f, range) {
         <div><b>${fmtNum(counts.how || 0)}</b>looked at <i>How it works</i></div>
         <div><b>${fmtNum(counts.demo || 0)}</b>opened the example set</div>
         <div><b>${fmtNum(counts.scan || 0)}</b>tried scanning</div>
+        <div><b>${fmtNum(counts.how_start || 0)}</b>started from <i>How it works</i></div>
+      </div>
+      <h3 class="steps-title">"Save your…" after the first item <span class="muted">(counting since 1 Nov)</span></h3>
+      <div class="funnel-extra">
+        <div><b>${fmtNum(counts.first_prompt || 0)}</b>saw it</div>
+        <div><b>${fmtNum(counts.first_prompt_create || 0)}</b>tapped <i>Create free account</i></div>
+        <div><b>${fmtNum(counts.first_prompt_later || 0)}</b>tapped <i>Maybe later</i></div>
+        <div><b>${fmtNum(counts.first_prompt_registered || 0)}</b>registered from it</div>
       </div>`}
     ${(f.bySource || []).length ? `
       <h3 class="steps-title">By link <span class="muted">(last 7 days)</span></h3>
@@ -4518,6 +4626,11 @@ async function renderStats() {
         ${statTile(fmtNum(a.unconfirmed), 'not confirmed', 'email link not tapped')}
         ${statTile(fmtNum(c.people), 'with a backup')}
       </div>
+      ${(a.unconfirmedList || []).length ? `
+      <h3 class="steps-title">Not confirmed their email yet</h3>
+      <div class="unconfirmed">${a.unconfirmedList.map((u) => `
+        <div class="uc-row"><a href="mailto:${esc(u.email)}?subject=${encodeURIComponent('Your Last Brick account')}">${esc(u.email)}</a><span class="muted small">${esc(new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))}</span></div>`).join('')}</div>
+      <p class="muted small">Tap an address to email them. They can also use <b>Resend confirmation email</b> when they try to log in.</p>` : ''}
       <h3 class="steps-title">Sign-ups per week <span class="muted">(last 12 weeks)</span></h3>
       ${barChart('signupChart', a.byWeek, signupOpts)}`)}
     ${sec('collections', 'Collections', `${fmtNum(c.sets)} sets · ${fmtNum(c.figs)} minifigures`, `
@@ -4729,7 +4842,14 @@ function renderAccountCard(opts = {}) {
       await logIn(c.email, c.password);
       savePref('pendingEmail', '');
       authDone('Logged in — your sets are backed up');
-    } catch (e) { showErr('authErr', e.message); busy(false); }
+    } catch (e) {
+      busy(false);
+      if (/confirm your email/i.test(e.message)) {
+        showErr('authErr', "You haven't confirmed your email yet. Tap the link in the email we sent you, then log in.");
+        $('#authErr').insertAdjacentHTML('afterend', '<p class="small resend-row"><button class="btn small" id="loginResend">Resend confirmation email</button></p>');
+        bindResend($('#loginResend'), c.email);
+      } else showErr('authErr', e.message);
+    }
   };
   if ($('#registerBtn')) $('#registerBtn').onclick = async () => {
     const c = creds();
@@ -4744,6 +4864,7 @@ function renderAccountCard(opts = {}) {
     try {
       const signedIn = await register(c.email, c.password);
       funnelStep('registered');
+      if (loadPref('regFrom', '') === 'first_prompt') { funnelStep('first_prompt_registered'); savePref('regFrom', ''); }
       if (signedIn) {
         authDone('Account created — your sets are backed up');
       } else {
@@ -4759,6 +4880,7 @@ function renderAccountCard(opts = {}) {
             ['Come back here and <b>log in</b>', 'On iPhone the link may open in Safari. Log in again in the app on your home screen.'],
           ],
           foot: "Can't find it? Check your spam folder.",
+          resend: c.email,
         });
       }
     } catch (e) { showErr('authErr', e.message); busy(false); }

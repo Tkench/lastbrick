@@ -3,8 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Last Brick</title>
-  <meta name="description" content="Got a box of mixed LEGO®? Turn it back into sets. Snap a minifigure to find out who it is, or add a set and see exactly which pieces are missing. Free.">
+  <title>Last Brick: find missing LEGO® pieces and rebuild your sets</title>
+  <meta name="description" content="Last Brick is a free app that shows exactly which pieces are missing from your old LEGO® sets, so you can rebuild them from a box of mixed bricks.">
+  <link rel="canonical" href="https://lastbrick.co.uk/">
+  <!-- The welcome text in <main> is for search engines and browsers without
+       JavaScript. When the app runs it's hidden at once and replaced. -->
+  <script>document.documentElement.classList.add('js');</script>
+  <style>.js .seo-intro { display: none; }</style>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Last Brick","url":"https://lastbrick.co.uk/","applicationCategory":"LifestyleApplication","operatingSystem":"Any (web browser)","description":"Free app that shows exactly which pieces are missing from your old LEGO® sets, so you can rebuild them from a box of mixed bricks. Also identifies minifigures from a photo.","offers":{"@type":"Offer","price":"0","priceCurrency":"GBP"}}</script>
   <!-- What Facebook, WhatsApp, iMessage, X etc. show when someone shares a link -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Last Brick">
@@ -37,7 +43,21 @@
     <button class="topbtn hidden" id="delBtn" aria-label="Delete this set">🗑</button>
   </header>
 
-  <main id="view"></main>
+  <main id="view">
+    <div class="seo-intro doc-body">
+      <h2>Your old sets are still in there.</h2>
+      <p>Got a box of mixed LEGO®? Last Brick helps you turn it back into sets. It's free, and your first set needs no sign-up.</p>
+      <ol>
+        <li><b>Add a set.</b> Type the set number, search by name, or scan a piece.</li>
+        <li><b>Tick off what you've found.</b> Go through the parts list as you sort your bricks.</li>
+        <li><b>See exactly what's missing.</b> Last Brick lists every piece you still need, with pictures.</li>
+      </ol>
+      <p>You can also snap a photo of a minifigure to find out who it is and which sets it came from.</p>
+      <p><a href="about.html">About Last Brick</a> · <a href="privacy.html">Privacy</a></p>
+      <noscript><p>Last Brick needs JavaScript turned on to run.</p></noscript>
+      <p><small>LEGO® is a trademark of the LEGO Group, which does not sponsor, authorise or endorse Last Brick.</small></p>
+    </div>
+  </main>
 
   <nav class="tabs" id="tabs">
     <button data-tab="sets"><span class="ico"><svg class="tab-bricks" viewBox="0 0 28 24" aria-hidden="true">

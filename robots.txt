@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://lastbrick.co.uk/sitemap.xml

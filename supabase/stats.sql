@@ -34,7 +34,7 @@ create table if not exists public.funnel (
 -- The steps that can be counted (updated when a new one is added, e.g. 'demo').
 alter table public.funnel drop constraint if exists funnel_step_check;
 alter table public.funnel add constraint funnel_step_check
-  check (step in ('visit', 'start', 'tap_fig', 'tap_set', 'how', 'scan', 'demo', 'first_item', 'gate', 'register_start', 'registered', 'confirmed'));
+  check (step in ('visit', 'start', 'tap_fig', 'tap_set', 'how', 'how_start', 'scan', 'demo', 'first_item', 'first_prompt', 'first_prompt_create', 'first_prompt_later', 'first_prompt_registered', 'gate', 'register_start', 'registered', 'confirmed'));
 alter table public.funnel enable row level security;
 
 drop policy if exists "Anyone can count a step" on public.funnel;
@@ -119,6 +119,9 @@ begin
       'total', (select count(*) from auth.users),
       'week', (select count(*) from auth.users where created_at > now() - interval '7 days'),
       'unconfirmed', (select count(*) from auth.users where email_confirmed_at is null),
+      -- Who hasn't confirmed yet, so you can get in touch (only you can see this page).
+      'unconfirmedList', (select coalesce(jsonb_agg(t), '[]') from (
+        select email, created_at from auth.users where email_confirmed_at is null order by created_at desc limit 50) t),
       'activeWeek', (select count(*) from auth.users u where u.last_sign_in_at > now() - interval '7 days'
                        or exists (select 1 from public.user_data d where d.user_id = u.id and d.updated_at > now() - interval '7 days')),
       'byWeek', (select jsonb_agg(jsonb_build_array(g.w, coalesce(a.n, 0)) order by g.w)

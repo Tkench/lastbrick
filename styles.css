@@ -1089,3 +1089,14 @@ h1.hero-title { font-size: 26px; font-weight: 800; }
    so the bar always sits at the very bottom (as it does on long pages). */
 html { min-height: 100%; min-height: 100lvh; }
 body { box-sizing: border-box; min-height: 100vh; min-height: 100lvh; }
+
+/* Resend confirmation email */
+.resend-row { margin: 6px 0 0; }
+.resent { color: var(--ok); font-weight: 600; font-size: 14px; }
+.mail-sheet .foot .link-btn { font-weight: 700; }
+/* Stats: unconfirmed accounts */
+.unconfirmed { display: grid; gap: 4px; margin-bottom: 6px; }
+.uc-row { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.uc-row a { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* "Save your …" after the first item */
+.first-prompt #fpLater { margin-top: 8px; }

@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.12.2';
+const APP_VERSION = '1.13.0';
 const APP_DATE = '2026-11-01';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -4199,6 +4199,7 @@ function renderScan() {
       html += `<div class="verdict-card no"><span class="verdict-ico">⚠️</span><div><b>Something went wrong</b><span>${esc(scanState.error)} You can still search the <a href="#missing">Looking for</a> list.</span></div></div>`;
     } else {
       html += renderScanResults(scanState.items);
+      if (scanState.rare) html += `<div id="rareCard">${renderRareCard(scanState.rare)}</div>`;
     }
     if (!scanState.loading && syncEnabled()) html += reportLink('id="reportScan"', scanState.error || !(scanState.items || []).length ? "Couldn't find it? Tell us" : 'Wrong match? Tell us');
     if (!scanState.loading) html += `<button class="btn primary block hero-cta scan-again" id="snap">${scanIcon({ onRed: true, cls: 'scan-ico btn-ico' })} Scan another piece</button>`;
@@ -4213,6 +4214,7 @@ function renderScan() {
     });
   }
   bindScanResultButtons();
+  bindRareCard();
 }
 
 function renderScanResults(items) {
@@ -4282,6 +4284,7 @@ $('#cameraInput').addEventListener('change', async (e) => {
   try {
     const found = await identifyPiece(file);
     scanState.items = found.items;
+    scanState.sample = await samplePieceColour(scanState.photoUrl, found.box).catch(() => null);
     await zoomPhoto(scanState, found.box);
   } catch (err) {
     scanState.error = err instanceof TypeError
@@ -4290,7 +4293,208 @@ $('#cameraInput').addEventListener('change', async (e) => {
   }
   scanState.loading = false;
   if (route().name === 'scan') renderScan();
+  if (scanState.items && scanState.items.length) checkRare(scanState);
 });
+
+/* ---------- Rare pieces ----------
+ * After a scan: if the piece is used in 10 sets or fewer in its colour, list
+ * those sets, so a reseller can check the box for their other pieces. The
+ * colour is guessed from the photo (only among the colours this piece comes
+ * in) and confirmed by the person. Minifigure pieces are left out. */
+const RARE_MAX = 10;
+const isFigPiece = (it) => /minifig|torso|\bhips\b|\blegs\b/i.test(it.name || '') || isLegs(it);
+
+// The piece's colour in the photo: the middle of the box the scanner found,
+// leaving out pixels that look like the paper behind it, and corrected so
+// the paper counts as white (indoor light is often yellow or blue).
+async function samplePieceColour(url, box) {
+  const img = await new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = url; });
+  const scale = Math.min(1, 400 / Math.max(img.naturalWidth, img.naturalHeight));
+  const W = Math.max(1, Math.round(img.naturalWidth * scale)), H = Math.max(1, Math.round(img.naturalHeight * scale));
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, W, H);
+  const px = ctx.getImageData(0, 0, W, H).data;
+  let l = W * 0.3, t = H * 0.3, r = W * 0.7, b = H * 0.7;
+  if (box && box.image_width > 0 && box.image_height > 0) {
+    const sx = W / box.image_width, sy = H / box.image_height;
+    l = box.left * sx; t = box.upper * sy; r = box.right * sx; b = box.lower * sy;
+  }
+  const at = (x, y) => { const i = (Math.round(y) * W + Math.round(x)) * 4; return [px[i], px[i + 1], px[i + 2]]; };
+  const median = (list) => [0, 1, 2].map((k) => { const v = list.map((p) => p[k]).sort((a, b2) => a - b2); return v[v.length >> 1]; });
+  // Background: a ring just outside the piece's box.
+  const ring = [];
+  const pad = Math.max(4, Math.min(r - l, b - t) * 0.15);
+  for (let i = 0; i < 60; i++) {
+    const f = i / 60;
+    for (const [x, y] of [[l - pad + (r - l + 2 * pad) * f, t - pad], [l - pad + (r - l + 2 * pad) * f, b + pad], [l - pad, t - pad + (b - t + 2 * pad) * f], [r + pad, t - pad + (b - t + 2 * pad) * f]]) {
+      if (x >= 0 && y >= 0 && x < W && y < H) ring.push(at(x, y));
+    }
+  }
+  const bg = ring.length > 20 ? median(ring) : null;
+  const bgLight = bg && (bg[0] + bg[1] + bg[2]) / 3 > 120;
+  const gain = bgLight ? bg.map((v) => Math.min(1.6, Math.max(0.75, 235 / Math.max(v, 1)))) : [1, 1, 1];
+  // The piece: the middle half of its box.
+  const inner = [];
+  const iw = (r - l) / 4, ih = (b - t) / 4;
+  for (let y = t + ih; y < b - ih; y += Math.max(1, (b - t) / 50)) {
+    for (let x = l + iw; x < r - iw; x += Math.max(1, (r - l) / 50)) {
+      if (x >= 0 && y >= 0 && x < W && y < H) inner.push(at(x, y));
+    }
+  }
+  if (!inner.length) return null;
+  const far = bg ? inner.filter((p) => Math.hypot(p[0] - bg[0], p[1] - bg[1], p[2] - bg[2]) > 45) : inner;
+  const use = far.length >= inner.length * 0.15 ? far : inner; // nearly all like the paper: probably a white piece
+  return median(use).map((v, k) => Math.min(255, Math.round(v * gain[k])));
+}
+
+function rgbToLab([r, g, b]) {
+  const lin = (v) => { v /= 255; return v > 0.04045 ? ((v + 0.055) / 1.055) ** 2.4 : v / 12.92; };
+  const [R, G, B] = [lin(r), lin(g), lin(b)];
+  const f = (v) => (v > 0.008856 ? Math.cbrt(v) : 7.787 * v + 16 / 116);
+  const x = f((R * 0.4124 + G * 0.3576 + B * 0.1805) / 0.95047);
+  const y = f(R * 0.2126 + G * 0.7152 + B * 0.0722);
+  const z = f((R * 0.0193 + G * 0.1192 + B * 0.9505) / 1.08883);
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+}
+const hexRgb = (hex) => [0, 2, 4].map((i) => parseInt(String(hex).slice(i, i + 2), 16) || 0);
+
+// The closest of the colours this piece comes in. Clear pieces take on the
+// colour behind them, so they're only picked if nothing solid is close.
+function guessColour(sample, colours) {
+  if (!sample) return null;
+  const s = rgbToLab(sample);
+  let best = null, bestD = Infinity;
+  for (const c of colours) {
+    const [L, a, b] = rgbToLab(hexRgb(c.rgb));
+    const d = Math.hypot(s[0] - L, s[1] - a, s[2] - b) + (/^trans/i.test(c.name) ? 15 : 0);
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  return best;
+}
+
+function refreshRare(st) {
+  if (scanState !== st || route().name !== 'scan' || !$('#rareCard')) {
+    if (scanState === st && route().name === 'scan' && st.rare) renderScan();
+    return;
+  }
+  $('#rareCard').innerHTML = st.rare ? renderRareCard(st.rare) : '';
+  bindRareCard();
+}
+
+async function checkRare(st) {
+  const top = st.items[0];
+  if (!helperAvailable() || isFigPiece(top)) return;
+  st.rare = { status: 'loading', id: top.id };
+  refreshRare(st);
+  try {
+    const data = await helperGet(`partfigs=${encodeURIComponent(top.id)}`);
+    const colours = (data.colors || []).filter((c) => c.id >= 0 && c.id !== 9999 && c.num_sets > 0);
+    if (!colours.length) { st.rare = null; return refreshRare(st); }
+    Object.assign(st.rare, { colours, partName: data.part.name });
+    if (!colours.some((c) => c.num_sets <= RARE_MAX)) st.rare.status = 'common';
+    else if (colours.length === 1) return chooseRareColour(st, colours[0].id);
+    else {
+      st.rare.guess = guessColour(st.sample, colours);
+      st.rare.status = st.rare.guess ? 'ask' : 'pick';
+    }
+  } catch {
+    st.rare = null; // a hiccup just means no rare-piece card
+  }
+  refreshRare(st);
+}
+
+async function chooseRareColour(st, colourId) {
+  const rare = st.rare;
+  rare.colour = rare.colours.find((c) => String(c.id) === String(colourId));
+  rare.status = 'checking';
+  refreshRare(st);
+  try {
+    if (rare.colour.num_sets > RARE_MAX * 2) {
+      rare.status = 'notrare'; rare.count = rare.colour.num_sets;
+    } else {
+      const data = await helperGet(`partsets=${encodeURIComponent(rare.id)}&color=${encodeURIComponent(colourId)}`);
+      if (st.rare !== rare || rare.colour.id !== Number(colourId)) return;
+      rare.count = data.count;
+      rare.sets = data.results || [];
+      rare.status = !data.count ? 'figsonly' : data.count > RARE_MAX ? 'notrare' : 'rare';
+    }
+  } catch {
+    rare.status = 'error';
+  }
+  refreshRare(st);
+}
+
+function renderRareCard(rare) {
+  const sw = (c) => `<span class="swatch" style="background:#${esc(c.rgb)}"></span>`;
+  const change = '<button class="link-btn" id="rareChange">Not this colour? Change it</button>';
+  const name = (c) => `${esc(c.name)} ${esc(rare.partName || 'piece')}`;
+  switch (rare.status) {
+    case 'loading':
+      return '<p class="muted small rare-quiet">Checking if it\'s a rare piece…</p>';
+    case 'common':
+      return '<p class="muted small rare-quiet">🧱 Common piece: used in more than 10 sets in every colour it comes in.</p>';
+    case 'ask':
+      return `
+        <div class="rare-card">
+          <b class="rare-title">💎 Could be a rare piece</b>
+          <p class="small">In some colours this piece has been used in 10 sets or fewer. What colour is yours?</p>
+          <p class="rare-guess">${sw(rare.guess)}<span>Looks like <b>${esc(rare.guess.name)}</b>. Is that right?</span></p>
+          <div class="cb-btns">
+            <button class="btn small primary" id="rareYes">Yes</button>
+            <button class="btn small" id="rareNo">No, pick the colour</button>
+          </div>
+        </div>`;
+    case 'pick': {
+      const list = [...rare.colours].sort((a, b) => (b === rare.guess) - (a === rare.guess));
+      return `
+        <div class="rare-card">
+          <b class="rare-title">Which colour is it?</b>
+          <p class="small muted">💎 = used in 10 sets or fewer in that colour.</p>
+          <div class="rare-colours">${list.map((c) => `
+            <button class="rare-colour" data-rare-colour="${c.id}">${sw(c)}<span>${esc(c.name)}</span>${c.num_sets <= RARE_MAX ? '<em aria-label="rare">💎</em>' : ''}</button>`).join('')}
+          </div>
+        </div>`;
+    }
+    case 'checking':
+      return `<div class="rare-card"><p class="small muted">${sw(rare.colour)} Checking which sets use ${name(rare.colour)}…</p></div>`;
+    case 'notrare':
+      return `<p class="muted small rare-quiet">${sw(rare.colour)} Not rare in ${esc(rare.colour.name)}: used in ${fmtNum(rare.count)} sets. ${change}</p>`;
+    case 'figsonly':
+      return `<p class="muted small rare-quiet">${sw(rare.colour)} In ${esc(rare.colour.name)}, this piece only comes with minifigures. ${change}</p>`;
+    case 'error':
+      return `<p class="muted small rare-quiet">Couldn't check whether it's rare just now. <button class="link-btn" id="rareRetry">Try again</button></p>`;
+    case 'rare':
+      return `
+        <div class="rare-card is-rare">
+          <b class="rare-title">💎 Rare piece: only in ${plural(rare.count, 'set', 'sets')} ever</b>
+          <p class="small">${sw(rare.colour)} ${name(rare.colour)} has only been used in ${rare.count === 1 ? 'this set' : 'these sets'}. Check your box for ${rare.count === 1 ? 'its' : 'their'} other pieces.</p>
+          <div class="name-results">${rare.sets.map((x) => `
+            <button class="name-result" data-rare-set="${esc(x.set_num)}">
+              <span class="thumb">${x.set_img_url ? `<img src="${esc(x.set_img_url)}" alt="" loading="lazy">` : '🧱'}</span>
+              <span class="grow"><b>${esc(x.name)}</b><small>#${esc(shortSetNum(x.set_num))} · ${esc(x.year)} · ${plural(x.num_parts, 'piece', 'pieces')}</small>${state.sets[x.set_num] ? '<span class="badge ok">In your sets</span>' : ''}</span>
+            </button>`).join('')}
+          </div>
+          <p class="small">${change}</p>
+        </div>`;
+    default:
+      return '';
+  }
+}
+
+function bindRareCard() {
+  const st = scanState;
+  if (!st || !st.rare || !$('#rareCard')) return;
+  if ($('#rareYes')) $('#rareYes').onclick = () => chooseRareColour(st, st.rare.guess.id);
+  const pick = () => { st.rare.status = 'pick'; refreshRare(st); };
+  if ($('#rareNo')) $('#rareNo').onclick = pick;
+  if ($('#rareChange')) $('#rareChange').onclick = pick;
+  if ($('#rareRetry')) $('#rareRetry').onclick = () => chooseRareColour(st, st.rare.colour.id);
+  document.querySelectorAll('[data-rare-colour]').forEach((b) => { b.onclick = () => chooseRareColour(st, b.dataset.rareColour); });
+  document.querySelectorAll('[data-rare-set]').forEach((b) => {
+    b.onclick = () => go(state.sets[b.dataset.rareSet] ? '#set/' + encodeURIComponent(b.dataset.rareSet) : '#add/' + encodeURIComponent(b.dataset.rareSet));
+  });
+}
 
 /* ---------- Report a problem ----------
  * Reports go to the "reports" table in Supabase (supabase/reports.sql) with

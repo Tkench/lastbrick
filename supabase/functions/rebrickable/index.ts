@@ -15,6 +15,8 @@
 //   ?figfind=cas123&name=…        { results: [figure, …] }       (match a figure scan)
 //   ?partfigs=973pb123c01         { part, colors: [colour, …] }  (colours a scanned piece comes in)
 //   ?partfigs=…&color=0           { part, color, results: [figure, …] } (figures using that piece)
+//   ?partsets=3794&color=72      { part, color, results: [set, …] } (sets, not figures, using that piece
+//                                 in that colour: for "rare piece, only in 4 sets")
 //   ?setfigs=6080-1               { results: [{ set_num, name, quantity, set_img_url, parts }] } (figures in a set)
 
 const RB = 'https://rebrickable.com/api/v3/lego';
@@ -271,6 +273,23 @@ async function partFigs(id: string, color: string) {
   };
 }
 
+async function partSets(id: string, color: string) {
+  const part = await findPart(id);
+  const colours = await cached('colors', KEEP_FOR, loadColors) as Record<string, { name: string; rgb: string }>;
+  const list = await allPages(`/parts/${encodeURIComponent(part.part_num)}/colors/${encodeURIComponent(color)}/sets/?page_size=1000`);
+  // deno-lint-ignore no-explicit-any
+  const sets = list.filter((s: any) => !String(s.set_num).startsWith('fig-'));
+  return {
+    part: { part_num: part.part_num, name: part.name, part_img_url: part.part_img_url },
+    color: { id: Number(color), ...(colours[color] || { name: '', rgb: 'cccccc' }) },
+    count: sets.length,
+    // Only the list when it's short: that's when it helps.
+    // deno-lint-ignore no-explicit-any
+    results: sets.length > 10 ? [] : sets.map((s: any) => ({ set_num: s.set_num, name: s.name, year: s.year, num_parts: s.num_parts, set_img_url: s.set_img_url }))
+      .sort((a: { year: number }, b: { year: number }) => a.year - b.year),
+  };
+}
+
 // The minifigures in a set, each with its pieces, so the app can show which are complete.
 async function setFigs(set: string) {
   const figs = await allPages(`/sets/${encodeURIComponent(set)}/minifigs/?page_size=1000`);
@@ -313,6 +332,13 @@ Deno.serve(async (req: Request) => {
     const blid = params.get('figfind');
     if (blid !== null) {
       return reply(200, await findFigs(blid.slice(0, 40), (params.get('name') || '').slice(0, 120)));
+    }
+    const partS = params.get('partsets');
+    if (partS !== null) {
+      const color = params.get('color') ?? '';
+      if (!PART_ID.test(partS)) return reply(400, { error: 'Invalid part number' });
+      if (!/^-?[0-9]{1,6}$/.test(color)) return reply(400, { error: 'Invalid colour' });
+      return reply(200, await cached(`partsets:${partS.toLowerCase()}:${color}`, KEEP_FOR, () => partSets(partS, color)));
     }
     const inSet = params.get('setfigs');
     if (inSet !== null) {

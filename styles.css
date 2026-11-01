@@ -1115,3 +1115,19 @@ body { box-sizing: border-box; min-height: 100vh; min-height: 100lvh; }
 
 .back-results { display: block; margin: 10px 0 0; font-weight: 600; }
 #addStatus, .add-check { scroll-margin-top: 70px; }
+
+/* Rare pieces, after a scan */
+.rare-card { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px; margin: 12px 0; }
+.rare-card.is-rare { border-color: #b388ff; background: #f6f0ff; color: #1b1b1f; }
+.rare-card.is-rare .name-result { background: #fff; }
+.rare-title { display: block; font-size: 16px; margin-bottom: 4px; }
+.rare-card p { margin: 4px 0 10px; }
+.rare-guess { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rare-quiet { margin: 12px 2px; }
+.rare-colours { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; max-height: 320px; overflow-y: auto; }
+.rare-colour { display: flex; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); font: inherit; font-size: 13px; color: var(--text); text-align: left; cursor: pointer; min-width: 0; }
+.rare-colour span:not(.swatch) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.rare-colour em { font-style: normal; }
+.rare-card .swatch, .rare-quiet .swatch { flex: none; }
+.rare-card .cb-btns { display: flex; gap: 8px; }
+.rare-card .cb-btns .btn { flex: 1 1 0; }

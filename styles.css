@@ -1109,3 +1109,9 @@ body { box-sizing: border-box; min-height: 100vh; min-height: 100lvh; }
 .confirm-banner .cb-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .confirm-banner .cb-btns .btn { flex: 1 1 auto; }
 .confirm-banner .resent { font-size: 13px; }
+
+.confirm-slim { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: #eef6ff; border: 1.5px solid #9cc7f2; border-radius: 12px; padding: 8px 12px; margin: 0 0 12px; font: inherit; font-size: 14px; color: #1b1b1f; cursor: pointer; }
+.confirm-slim .chev { margin-left: auto; color: var(--brand); font-size: 20px; font-weight: 800; }
+
+.back-results { display: block; margin: 10px 0 0; font-weight: 600; }
+#addStatus, .add-check { scroll-margin-top: 70px; }

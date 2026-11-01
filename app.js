@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.12.1';
+const APP_VERSION = '1.12.2';
 const APP_DATE = '2026-11-01';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -388,17 +388,19 @@ function showBackupSheet(reason = null) {
   renderAccountCard({ mode: 'create' });
 }
 
-// Signed up but not confirmed yet (and not logged in): a reminder at the top
-// of My sets until they log in, with the email sent again if they need it.
+// Signed up but not logged in on this device yet: a reminder at the top of
+// My sets until they log in. The app can't tell whether they've confirmed
+// (they may have tapped the link on another device), so it covers both.
+const awaitingLogin = () => syncEnabled() && !session && !!loadPref('pendingEmail', '');
 function confirmBanner() {
   const email = loadPref('pendingEmail', '');
   return `
     <div class="confirm-banner" id="confirmBanner" role="status">
-      <p><b>📧 Confirm your email to save your sets</b>
-      <small>We sent a link to <b>${esc(email)}</b>. Tap it, then log in here.</small></p>
+      <p><b>📧 Log in to save your sets</b>
+      <small>Confirmed your email? Log in here to back up your sets. Not got the email yet? We sent it to <b>${esc(email)}</b>.</small></p>
       <div class="cb-btns">
+        <button class="btn small primary" id="cbLogin">Log in</button>
         <button class="btn small" id="cbResend">Resend email</button>
-        <button class="btn small primary" id="cbLogin">I've confirmed: log in</button>
       </div>
     </div>`;
 }
@@ -406,6 +408,12 @@ function bindConfirmBanner() {
   if (!$('#confirmBanner')) return;
   bindResend($('#cbResend'), loadPref('pendingEmail', ''));
   $('#cbLogin').onclick = () => go('#settings');
+}
+// The slim version, at the top of a set's page and Looking for.
+function addConfirmSlim() {
+  if (!awaitingLogin()) return;
+  $('#view').insertAdjacentHTML('afterbegin', '<button class="confirm-slim" id="confirmSlim"><span>📧 <b>Log in to save your sets</b></span><span class="chev" aria-hidden="true">›</span></button>');
+  $('#confirmSlim').onclick = () => go('#settings');
 }
 
 // Straight after a guest's first set or minifigure: "Save your Fire Truck".
@@ -617,12 +625,19 @@ const needsOwnKey = () => !helperAvailable() && !state.apiKey;
 async function fetchSet(setNum, { refresh = false } = {}) {
   if (!helperAvailable()) return fetchSetDirect(setNum);
   let res;
-  try {
-    res = await fetch(`${SUPABASE_URL}/functions/v1/rebrickable?set=${encodeURIComponent(setNum)}${refresh ? '&refresh=1' : ''}`,
-      { headers: { apikey: SUPABASE_KEY } });
-  } catch {
-    if (state.apiKey) return fetchSetDirect(setNum);
-    throw new Error('No connection. Check your internet and try again.');
+  const url = `${SUPABASE_URL}/functions/v1/rebrickable?set=${encodeURIComponent(setNum)}${refresh ? '&refresh=1' : ''}`;
+  // A hiccup (no answer, or an error from the helper) gets one quiet second try.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      res = await fetch(url, { headers: { apikey: SUPABASE_KEY } });
+      if (res.status < 500 || attempt) break;
+    } catch {
+      if (attempt) {
+        if (state.apiKey) return fetchSetDirect(setNum);
+        throw new Error('No connection. Check your internet and try again.');
+      }
+    }
+    await new Promise((r) => setTimeout(r, 1200));
   }
   const data = await res.json().catch(() => ({}));
   if (res.ok) return buildSet(data.info, data.results, data.cats || {});
@@ -1552,7 +1567,7 @@ function renderSets() {
       <button data-c="figs" class="${figs ? 'active' : ''}">${figIcon()} Minifigures <em>${figCount}</em></button>
     </div>
     <button class="btn primary block" id="addBtn">＋ Add a ${word[0]}</button><p></p>
-    ${syncEnabled() && !session && loadPref('pendingEmail', '') ? confirmBanner() : syncEnabled() && !session && everything.length ? `<button class="guest-banner" id="guestBanner"><span>☁️ <b>Saved on this phone only</b><small>Create a free account to back it up</small></span><span class="chev" aria-hidden="true">›</span></button>` : ''}
+    ${awaitingLogin() ? confirmBanner() : syncEnabled() && !session && everything.length ? `<button class="guest-banner" id="guestBanner"><span>☁️ <b>Saved on this phone only</b><small>Create a free account to back it up</small></span><span class="chev" aria-hidden="true">›</span></button>` : ''}
     ${figs ? renderFigHints() : ''}
     ${figs && plainFigs().length ? `<div class="choose-bar"><span>🤔 <b>${plural(plainFigs().length, 'figure needs', 'figures need')}</b> ${plainFigs().length === 1 ? 'its' : 'their'} version chosen</span><button class="btn small" id="choosePlain">Choose</button></div>` : ''}`;
   if (!all.length) {
@@ -1773,6 +1788,7 @@ function renderAdd() {
         <label class="lbl" for="setNameSearch">Search by name or theme</label>
         <input class="field" id="setNameSearch" type="search" autocomplete="off" placeholder="e.g. castle, fire station, pirate ship 1989">
         <div id="byNameResults" role="status"></div>
+        <button class="link-btn back-results hidden" id="backResults">‹ Back to results</button>
       </div>
       <label class="lbl">How complete is it?</label>
       <div class="seg" id="startMode">
@@ -1798,7 +1814,9 @@ function renderAdd() {
   });
   const input = $('#setNum');
   input.focus();
+  let lookup = 0; // only the latest lookup is shown, so a second tap can't flash up an old set
   const submit = async () => {
+    const mine = ++lookup;
     const num = normaliseSetNum(input.value);
     if (!num) {
       $('#addStatus').innerHTML = '<p class="form-error" role="alert">Type the set number first. It\'s on the front of the box or manual.</p>';
@@ -1811,6 +1829,7 @@ function renderAdd() {
     $('#addStatus').innerHTML = '<div class="spinner"></div><p class="center muted">Finding set…</p>';
     try {
       const set = await fetchSet(num);
+      if (mine !== lookup) return;
       if (!set.parts.length) throw new Error('Rebrickable has no parts list for this set.');
       // Show the set first, so a mistyped number doesn't add the wrong one.
       const pieces = set.parts.reduce((t, p) => t + p.qty, 0);
@@ -1823,7 +1842,7 @@ function renderAdd() {
           <p class="muted">#${esc(shortSetNum(set.setNum))}${set.year ? ' · ' + esc(set.year) : ''} · ${plural(pieces, 'piece', 'pieces')}</p>
           <button class="btn primary block" id="addYes">Yes, that's my set</button>
           <p></p>
-          <button class="btn block" id="addNo">No, change the number</button>
+          <button class="btn block" id="addNo">${fromSearch ? 'No, back to results' : 'No, change the number'}</button>
         </div>`;
       const addIt = () => {
         if (state.sets[set.setNum]) return go('#set/' + encodeURIComponent(set.setNum));
@@ -1849,14 +1868,20 @@ function renderAdd() {
         $('#addStatus').innerHTML = '';
         btn.disabled = false;
         btn.classList.remove('hidden');
+        if (fromSearch) return showResults();
         input.select();
         input.focus();
       };
-      $('#addYes').scrollIntoView({ block: 'nearest' });
+      // From a search, bring the whole card into view; from a number, just the buttons.
+      if (fromSearch) $('.add-check').scrollIntoView({ block: 'start' });
+      else $('#addYes').scrollIntoView({ block: 'nearest' });
     } catch (e) {
+      if (mine !== lookup) return;
       btn.disabled = false;
       const msg = e instanceof TypeError ? 'No connection to Rebrickable. Check your internet and try again.' : e.message;
-      $('#addStatus').innerHTML = `<p class="center" style="color:var(--miss)">${esc(msg)}</p>`;
+      $('#addStatus').innerHTML = `<p class="center" style="color:var(--miss)">${esc(msg)}</p>
+        ${msg === SET_NOT_FOUND ? '' : '<p class="center"><button class="btn small" id="addRetry">Try again</button></p>'}`;
+      if ($('#addRetry')) { btn.classList.add('hidden'); $('#addRetry').onclick = submit; }
     }
   };
   $('#fetchBtn').onclick = submit;
@@ -1867,6 +1892,7 @@ function renderAdd() {
   let nameTimer = null;
   nameBox.oninput = () => {
     clearTimeout(nameTimer);
+    if (fromSearch) showResults();
     nameTimer = setTimeout(async () => {
       const out = $('#byNameResults');
       const q = nameBox.value.trim();
@@ -1881,14 +1907,35 @@ function renderAdd() {
           <button class="name-result" data-pick="${esc(x.num)}">
             <span class="thumb">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : '🧱'}</span>
             <span class="grow"><b>${esc(x.name)}</b><small>#${esc(shortSetNum(x.num))} · ${x.year} · ${plural(x.pieces, 'piece', 'pieces')}${x.theme ? ' · ' + esc(x.theme) : ''}</small>${state.sets[x.num] ? '<span class="badge ok">In your sets</span>' : ''}</span>
-            <span class="chev" aria-hidden="true">›</span>
           </button>`).join('')}</div>`
         : `<p class="muted small">No sets match “${esc(q)}”. Try fewer or different words, e.g. just “castle”.</p>`;
       out.querySelectorAll('[data-pick]').forEach((b) => {
-        b.onclick = () => { input.value = shortSetNum(b.dataset.pick); window.scrollTo(0, 0); submit(); };
+        b.onclick = () => {
+          // Fold the list away and show "Is this your set?" just below the search box.
+          fromSearch = b.dataset.pick;
+          input.value = shortSetNum(b.dataset.pick);
+          out.classList.add('hidden');
+          $('#backResults').classList.remove('hidden');
+          submit();
+          $('#addStatus').scrollIntoView({ block: 'start' });
+        };
       });
     }, 200);
   };
+  // Back to the search results, with the set you tapped in view.
+  let fromSearch = null;
+  const showResults = () => {
+    lookup++; // forget a lookup still on its way
+    $('#addStatus').innerHTML = '';
+    $('#fetchBtn').disabled = false;
+    $('#fetchBtn').classList.remove('hidden');
+    $('#byNameResults').classList.remove('hidden');
+    $('#backResults').classList.add('hidden');
+    const picked = fromSearch && $(`#byNameResults [data-pick="${CSS.escape(fromSearch)}"]`);
+    fromSearch = null;
+    if (picked) picked.scrollIntoView({ block: 'center' });
+  };
+  $('#backResults').onclick = showResults;
   // "#add/8098-1" (from a minifigure's "Got that set?"): fill in the number and look it up.
   const given = route().arg;
   if (given) { input.value = shortSetNum(given); submit(); }
@@ -3567,6 +3614,7 @@ function renderSet(setNum) {
     </div>
     <p class="center small"><button class="link-btn muted" id="refresh">Parts list looks wrong? Download it again</button></p>`;
   $('#view').innerHTML = html;
+  addConfirmSlim();
 
   document.querySelectorAll('#filter button').forEach((b) => {
     b.onclick = () => { ui.setFilter = b.dataset.f; renderSet(setNum); };
@@ -3831,6 +3879,7 @@ function renderMissing() {
     html += renderMissingItems(grp.items);
   }
   $('#view').innerHTML = html;
+  addConfirmSlim();
 
   const rerender = () => { const y = window.scrollY; renderMissing(); window.scrollTo(0, y); };
   $('#filterBtn').onclick = () => {

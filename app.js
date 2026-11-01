@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.12.0';
+const APP_VERSION = '1.12.1';
 const APP_DATE = '2026-11-01';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -386,6 +386,26 @@ function showBackupSheet(reason = null) {
   gateKeep = false;
   afterAuth = () => { closeSheet(); render(); };
   renderAccountCard({ mode: 'create' });
+}
+
+// Signed up but not confirmed yet (and not logged in): a reminder at the top
+// of My sets until they log in, with the email sent again if they need it.
+function confirmBanner() {
+  const email = loadPref('pendingEmail', '');
+  return `
+    <div class="confirm-banner" id="confirmBanner" role="status">
+      <p><b>📧 Confirm your email to save your sets</b>
+      <small>We sent a link to <b>${esc(email)}</b>. Tap it, then log in here.</small></p>
+      <div class="cb-btns">
+        <button class="btn small" id="cbResend">Resend email</button>
+        <button class="btn small primary" id="cbLogin">I've confirmed: log in</button>
+      </div>
+    </div>`;
+}
+function bindConfirmBanner() {
+  if (!$('#confirmBanner')) return;
+  bindResend($('#cbResend'), loadPref('pendingEmail', ''));
+  $('#cbLogin').onclick = () => go('#settings');
 }
 
 // Straight after a guest's first set or minifigure: "Save your Fire Truck".
@@ -1532,7 +1552,7 @@ function renderSets() {
       <button data-c="figs" class="${figs ? 'active' : ''}">${figIcon()} Minifigures <em>${figCount}</em></button>
     </div>
     <button class="btn primary block" id="addBtn">＋ Add a ${word[0]}</button><p></p>
-    ${syncEnabled() && !session && everything.length ? `<button class="guest-banner" id="guestBanner"><span>☁️ <b>Saved on this phone only</b><small>Create a free account to back it up</small></span><span class="chev" aria-hidden="true">›</span></button>` : ''}
+    ${syncEnabled() && !session && loadPref('pendingEmail', '') ? confirmBanner() : syncEnabled() && !session && everything.length ? `<button class="guest-banner" id="guestBanner"><span>☁️ <b>Saved on this phone only</b><small>Create a free account to back it up</small></span><span class="chev" aria-hidden="true">›</span></button>` : ''}
     ${figs ? renderFigHints() : ''}
     ${figs && plainFigs().length ? `<div class="choose-bar"><span>🤔 <b>${plural(plainFigs().length, 'figure needs', 'figures need')}</b> ${plainFigs().length === 1 ? 'its' : 'their'} version chosen</span><button class="btn small" id="choosePlain">Choose</button></div>` : ''}`;
   if (!all.length) {
@@ -1669,6 +1689,7 @@ function renderSets() {
   $('#view').innerHTML = html;
   // Minifigures can still be scanned without an account; the check happens when adding.
   if ($('#guestBanner')) $('#guestBanner').onclick = showBackupSheet;
+  bindConfirmBanner();
   if ($('#choosePlain')) $('#choosePlain').onclick = () => showVersionPicker(plainFigs()[0].setNum);
   $('#addBtn').onclick = () => {
     if (figs) { resetFigAdd(); go('#addfig'); return; }

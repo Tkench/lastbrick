@@ -1100,3 +1100,12 @@ body { box-sizing: border-box; min-height: 100vh; min-height: 100lvh; }
 .uc-row a { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* "Save your …" after the first item */
 .first-prompt #fpLater { margin-top: 8px; }
+
+/* "Confirm your email" reminder on My sets */
+.confirm-banner { background: #eef6ff; border: 1.5px solid #9cc7f2; border-radius: 12px; padding: 10px 12px; margin: 0 0 12px; color: #1b1b1f; }
+.confirm-banner p { margin: 0 0 8px; }
+.confirm-banner p > b { font-size: 14px; }
+.confirm-banner small { display: block; font-size: 13px; color: #4b4b55; margin-top: 2px; overflow-wrap: anywhere; }
+.confirm-banner .cb-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.confirm-banner .cb-btns .btn { flex: 1 1 auto; }
+.confirm-banner .resent { font-size: 13px; }

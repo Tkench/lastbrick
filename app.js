@@ -22,8 +22,8 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.13.0';
-const APP_DATE = '2026-11-01';
+const APP_VERSION = '1.13.1';
+const APP_DATE = '2026-11-04';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
 // Cloudflare Web Analytics (cookie-free visitor stats). Paste the site's token here
@@ -4724,8 +4724,8 @@ function sourceRows(sources) {
 }
 
 // The Stats page funnel: how many new devices reached each step, and the biggest drop.
-function renderFunnel(f, range) {
-  const counts = f[range] || {};
+function renderFunnel(f, when) {
+  const counts = f.counts || {};
   const start = counts.visit || 0;
   const rows = FUNNEL_STEPS.map(([k, label]) => [k, label, counts[k] || 0]);
   let worst = -1, worstLoss = 0;
@@ -4735,17 +4735,13 @@ function renderFunnel(f, range) {
     if (loss > worstLoss) { worstLoss = loss; worst = i; }
   });
   $('#funnelCard').innerHTML = `
-    <div class="seg funnel-range">
-      <button data-range="days2" class="${range === 'days2' ? 'active' : ''}">Today &amp; yesterday</button>
-      <button data-range="week" class="${range === 'week' ? 'active' : ''}">Last 7 days</button>
-    </div>
     ${start ? rows.map(([k, label, n], i) => `
       <div class="funnel-row ${i === worst ? 'worst' : ''}">
         <div class="src-top"><b>${esc(label)}</b><span>${fmtNum(n)}${i ? ` <em class="muted">· ${Math.round((n / start) * 100)}%</em>` : ''}</span></div>
         <div class="src-bar"><span style="width:${Math.max(n ? 2 : 0, Math.round((n / start) * 100))}%"></span></div>
         ${i === worst ? `<div class="small funnel-note">⬆ Biggest drop: ${fmtNum(worstLoss)} ${worstLoss === 1 ? 'person' : 'people'} stopped here</div>` : ''}
       </div>`).join('')
-      : '<p class="muted small">No new visitors counted yet. Steps are counted from when this was switched on, for people new to Last Brick.</p>'}
+      : `<p class="muted small">No new visitors counted ${when}.</p>`}
     ${`
       <h3 class="steps-title">On the welcome screen <span class="muted">(counting since 29 Oct)</span></h3>
       <div class="funnel-extra">
@@ -4764,13 +4760,10 @@ function renderFunnel(f, range) {
         <div><b>${fmtNum(counts.first_prompt_registered || 0)}</b>registered from it</div>
       </div>`}
     ${(f.bySource || []).length ? `
-      <h3 class="steps-title">By link <span class="muted">(last 7 days)</span></h3>
+      <h3 class="steps-title">By link</h3>
       <div class="funnel-src"><span></span><b>Visited</b><b>Added</b><b>Registered</b>
       ${f.bySource.map((x) => `<span>${esc(x.source.replace('/', ' · '))}</span><em>${fmtNum(x.visit)}</em><em>${fmtNum(x.first_item)}</em><em>${fmtNum(x.registered)}</em>`).join('')}</div>` : ''}
     <p class="muted small">Each phone or computer is counted once per step, from the first time it reaches it. People who used Last Brick before this was switched on aren't counted.</p>`;
-  document.querySelectorAll('[data-range]').forEach((b) => {
-    b.onclick = () => { savePref('funnelRange', b.dataset.range); renderFunnel(f, b.dataset.range); };
-  });
 }
 
 function countVisit() {
@@ -4843,18 +4836,32 @@ function statTile(value, label, sub = '') {
   return `<div class="stat-tile"><b>${value}</b><span>${esc(label)}</span>${sub ? `<em>${esc(sub)}</em>` : ''}</div>`;
 }
 
+// The period every section of the Stats page shows (remembered).
+const STATS_PERIODS = [['today', 'Today'], ['yesterday', 'Yesterday'], ['7', '7 days'], ['30', '30 days'], ['all', 'All time']];
+const STATS_WHEN = { today: 'today', yesterday: 'yesterday', 7: 'in the last 7 days', 30: 'in the last 30 days', all: 'since the start' };
+
 async function renderStats() {
   setTitle('Stats');
   if (!session) { go('#settings'); return; }
-  $('#view').innerHTML = '<div class="spinner"></div><p class="center muted">Loading stats…</p>';
+  const period = loadPref('statsPeriod', '30');
+  $('#view').innerHTML = `
+    <div class="seg stats-period" role="group" aria-label="Show stats for">
+      ${STATS_PERIODS.map(([k, label]) => `<button data-period="${k}" class="${k === period ? 'active' : ''}">${label}</button>`).join('')}
+    </div>
+    <div id="statsBody"><div class="spinner"></div><p class="center muted">Loading stats…</p></div>`;
+  document.querySelectorAll('[data-period]').forEach((b) => {
+    b.onclick = () => { savePref('statsPeriod', b.dataset.period); renderStats(); };
+  });
   let d;
   try {
-    d = await sbFetch('/rest/v1/rpc/admin_stats', { method: 'POST', auth: true, body: {} });
+    d = await sbFetch('/rest/v1/rpc/admin_stats', { method: 'POST', auth: true, body: { period } });
   } catch (e) {
-    $('#view').innerHTML = `<div class="empty">${emptyBrick()}<b>Stats aren't available</b><br>${esc(e.message)}</div>`;
+    if (route().name === 'stats') $('#statsBody').innerHTML = `<div class="empty">${emptyBrick()}<b>Stats aren't available</b><br>${esc(e.message)}<br><br>If you've just updated the app, run the latest <b>supabase/stats.sql</b> in the Supabase SQL Editor.</div>`;
     return;
   }
-  if (route().name !== 'stats') return;
+  // Another period was picked while this one loaded.
+  if (route().name !== 'stats' || loadPref('statsPeriod', '30') !== period || !$('#statsBody')) return;
+  const when = STATS_WHEN[period];
   const v = d.visits, a = d.accounts, c = d.collections, r = d.reports;
   const pctFound = c.need ? Math.round((c.have / c.need) * 100) : 0;
   const thumb = (img, fig) => `<div class="thumb">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : fig ? '🙂' : '🧱'}</div>`;
@@ -4865,7 +4872,7 @@ async function renderStats() {
         <span class="rank-n">${i + 1}</span>${thumb(x.img, fig)}
         <div class="grow" style="min-width:0"><div class="sname"><b>${esc(x.name || x.num)}</b></div><div class="small muted">#${esc(shortSetNum(x.num))}</div></div>
         <span class="badge ok">${x.people} ${x.people === 1 ? 'person' : 'people'}</span>
-      </div>`).join('') : '<p class="muted small">Nothing yet.</p>');
+      </div>`).join('') : `<p class="muted small">None added ${when}.</p>`);
 
   // Sections open and close (remembered); the visitor numbers always show.
   const open = new Set(JSON.parse(loadPref('statsOpen', '[]') || '[]'));
@@ -4874,49 +4881,54 @@ async function renderStats() {
       <summary><span class="chev" aria-hidden="true">›</span><b>${title}</b><em>${summary}</em></summary>
       <div class="stats-body">${body}</div>
     </details>`;
+  const note = (text) => `<p class="muted small" style="margin-top:0">${text}</p>`;
   const topSource = (v.sources || []).reduce((m, x) => { const p = x.source.split('/')[0]; m[p] = (m[p] || 0) + x.visits; return m; }, {});
   const best = Object.entries(topSource).sort((x, y) => y[1] - x[1])[0];
-  const f2 = (d.funnel && d.funnel.days2) || {};
-  $('#view').innerHTML = `
-    <h3 class="steps-title">Visitors</h3>
+  const fc = (d.funnel && d.funnel.counts) || {};
+  const chartWhen = period === 'all' ? 'since the first visit' : 'last 30 days';
+  const weeksWhen = period === 'all' ? 'since the first sign-up' : 'last 12 weeks';
+  $('#statsBody').innerHTML = `
+    <h3 class="steps-title">Visitors <span class="muted">(${when})</span></h3>
     <div class="stat-grid">
-      ${statTile(fmtNum(v.today), 'today')}
-      ${statTile(fmtNum(v.week), 'last 7 days')}
-      ${statTile(fmtNum(v.month), 'last 30 days')}
-      ${statTile(fmtNum(v.newMonth), 'new visitors', 'last 30 days')}
+      ${statTile(fmtNum(v.total), 'visitors')}
+      ${statTile(fmtNum(v.new), 'new visitors')}
+      ${statTile(fmtNum(v.installed), 'from a home screen')}
+      ${statTile(fmtNum(a.new), 'new accounts')}
     </div>
-    ${sec('perday', 'Visitors per day', 'last 30 days', `
+    ${sec('perday', 'Visitors per day', chartWhen, `
       ${barChart('visitChart', v.byDay, visitsOpts)}
-      <p class="muted small">A visitor is one phone or computer opening the app on a day. ${fmtNum(v.installedMonth)} of the last 30 days' visits were from the app on a home screen.</p>`)}
+      <p class="muted small">A visitor is one phone or computer opening the app on a day. This chart always shows the ${period === 'all' ? 'whole time since the first visit' : 'last 30 days'}.</p>`)}
     ${sec('sources', 'Where visitors came from', best ? `${esc(best[0])} · ${fmtNum(best[1])}` : 'nothing yet', `
-      <p class="muted small" style="margin-top:0">Last 30 days.</p>
-      ${(v.sources || []).length ? sourceRows(v.sources) : '<p class="muted small">Nothing yet.</p>'}
+      ${note(`Visits ${when}.`)}
+      ${(v.sources || []).length ? sourceRows(v.sources) : `<p class="muted small">No visits ${when}.</p>`}
       <p class="muted small">Tip: give each post its own link, e.g. <b>lastbrick.co.uk/?utm_source=facebook&amp;utm_content=group3</b>, to see exactly which one brought people in. "No extra tag" includes visits from before tags were saved.</p>`)}
-    ${sec('funnel', 'Where people drop off', d.funnel ? `${fmtNum(f2.visit || 0)} new → ${fmtNum(f2.start || 0)} started` : 'not set up', `<div id="funnelCard">${d.funnel ? '' : '<p class="muted small">Run the latest <b>supabase/stats.sql</b> in the SQL Editor to start counting steps.</p>'}</div>`)}
-    ${sec('accounts', 'Accounts', `${fmtNum(a.total)} · ${fmtNum(a.week)} new this week`, `
+    ${sec('funnel', 'Where people drop off', `${fmtNum(fc.visit || 0)} new → ${fmtNum(fc.start || 0)} started`, `
+      ${note(`New visitors ${when}.`)}<div id="funnelCard"></div>`)}
+    ${sec('accounts', 'Accounts', `${fmtNum(a.total)} · ${fmtNum(a.new)} new`, `
       <div class="stat-grid">
-        ${statTile(fmtNum(a.total), 'accounts', `${fmtNum(a.week)} new this week`)}
-        ${statTile(fmtNum(a.activeWeek), 'active this week')}
-        ${statTile(fmtNum(a.unconfirmed), 'not confirmed', 'email link not tapped')}
-        ${statTile(fmtNum(c.people), 'with a backup')}
+        ${statTile(fmtNum(a.total), 'accounts in total')}
+        ${statTile(fmtNum(a.new), 'new', when)}
+        ${statTile(fmtNum(a.active), 'active', when)}
+        ${statTile(fmtNum(a.unconfirmed), 'not confirmed', `signed up ${when}`)}
       </div>
       ${(a.unconfirmedList || []).length ? `
-      <h3 class="steps-title">Not confirmed their email yet</h3>
+      <h3 class="steps-title">Signed up ${when}, not confirmed yet</h3>
       <div class="unconfirmed">${a.unconfirmedList.map((u) => `
         <div class="uc-row"><a href="mailto:${esc(u.email)}?subject=${encodeURIComponent('Your Last Brick account')}">${esc(u.email)}</a><span class="muted small">${esc(new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))}</span></div>`).join('')}</div>
-      <p class="muted small">Tap an address to email them. They can also use <b>Resend confirmation email</b> when they try to log in.</p>` : ''}
-      <h3 class="steps-title">Sign-ups per week <span class="muted">(last 12 weeks)</span></h3>
+      <p class="muted small">Tap an address to email them. They can also use <b>Resend confirmation email</b> when they try to log in, and they get one reminder email automatically.</p>` : ''}
+      <h3 class="steps-title">Sign-ups per week <span class="muted">(${weeksWhen})</span></h3>
       ${barChart('signupChart', a.byWeek, signupOpts)}`)}
-    ${sec('collections', 'Collections', `${fmtNum(c.sets)} sets · ${fmtNum(c.figs)} minifigures`, `
-      <p class="muted small" style="margin-top:0">Accounts only.</p>
+    ${sec('collections', 'Collections', `${plural(c.sets, 'set', 'sets')} · ${plural(c.figs, 'minifigure', 'minifigures')}`, `
+      ${note(`Sets and minifigures added ${when}, by people with an account.`)}
       <div class="stat-grid">
         ${statTile(fmtNum(c.sets), 'sets', `${fmtNum(c.complete)} complete`)}
         ${statTile(fmtNum(c.figs), 'minifigures')}
         ${statTile(pctFound + '%', 'pieces found', `${fmtNum(c.have)} of ${fmtNum(c.need)}`)}
-        ${statTile(c.value ? money(Number(c.value)) : '–', 'total value', 'where entered')}
+        ${statTile(fmtNum(c.people), 'people', 'who added them')}
       </div>
-      <p class="muted small">Looked up by anyone (with or without an account): ${plural(c.lookedUp, 'different set', 'different sets')} and ${plural(c.figsLookedUp, 'minifigure', 'minifigures')}.</p>`)}
+      <p class="muted small">Looked up by anyone ${when} (with or without an account): ${plural(c.lookedUp, 'different set', 'different sets')} and ${plural(c.figsLookedUp, 'minifigure', 'minifigures')}.${c.value ? ` Total value where entered: ${money(Number(c.value))}.` : ''}</p>`)}
     ${sec('popular', 'Popular sets, minifigures &amp; pieces', d.topSets.length ? esc(d.topSets[0].name || d.topSets[0].num) : 'nothing yet', `
+      ${note(`From sets and minifigures added ${when}.`)}
       <h3 class="steps-title">Most popular sets</h3>${rankList(d.topSets, false)}
       <h3 class="steps-title">Most popular minifigures</h3>${rankList(d.topFigs, true)}
       <h3 class="steps-title">Most-wanted pieces</h3>
@@ -4927,12 +4939,13 @@ async function renderStats() {
           <div class="grow" style="min-width:0"><div class="sname"><b>${esc(x.name)}</b></div><div class="small muted">${esc(x.colour)}</div></div>
           <span class="badge miss">${x.people} ${x.people === 1 ? 'person' : 'people'} · ${x.missing} needed</span>
         </div>`).join('') : '<p class="muted small">Nothing yet.</p>'}`)}
-    ${sec('reports', 'Problem reports', `${fmtNum(r.total)} · ${fmtNum(r.week)} this week`, `
+    ${sec('reports', 'Problem reports', `${fmtNum(r.inPeriod)} · ${fmtNum(r.total)} in total`, `
+      ${note(`Reports ${when}.`)}
       ${r.recent.length ? r.recent.map((x) => `
         <div class="report-row">
           <div class="small muted">${esc(new Date(x.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))} · ${esc({ scan: 'Scan', minifig: 'Minifigure', general: 'General' }[x.kind] || x.kind)}${x.wants_reply ? ' · <b>wants a reply</b>' : ''}</div>
           <div>${x.message ? esc(x.message) : '<span class="muted">(no message)</span>'}</div>
-        </div>`).join('') : '<p class="muted small">No reports yet.</p>'}
+        </div>`).join('') : `<p class="muted small">No reports ${when}.</p>`}
       <p class="muted small">Full details (and reply email addresses) are in Supabase → Table Editor → reports.</p>`)}
     <p class="muted small center">Only you can see this page.</p>`;
   document.querySelectorAll('.stats-sec').forEach((el) => {
@@ -4942,7 +4955,7 @@ async function renderStats() {
     });
   });
   bindBarChart('visitChart', v.byDay, visitsOpts);
-  if (d.funnel) renderFunnel(d.funnel, loadPref('funnelRange', 'days2'));
+  if (d.funnel) renderFunnel(d.funnel, when);
   bindBarChart('signupChart', a.byWeek, signupOpts);
 }
 

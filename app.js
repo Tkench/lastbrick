@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.15.0';
+const APP_VERSION = '1.15.1';
 const APP_DATE = '2026-11-06';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -5226,20 +5226,47 @@ let demo = null;
 // from the welcome screen: these people haven't seen what Last Brick is yet.
 const DEMO_FROM_LINK = /^#demo\b/.test(location.hash);
 
-// "Save it for later": the phone's share menu (Reminders, Notes, WhatsApp to
-// yourself…), or the link copied where there's no share menu. Nothing is stored.
-async function saveForLater() {
+// "Save it for later": a small panel with ways to send yourself the link.
+// Some in-app browsers block the share menu or copying, so the link is also
+// shown in a box that can always be pressed and held to copy. Nothing is stored.
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* blocked here: try the older way */ }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.setAttribute('readonly', '');
+  Object.assign(ta.style, { position: 'fixed', top: '0', opacity: '0' });
+  document.body.appendChild(ta);
+  ta.select(); ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  ta.remove();
+  return ok;
+}
+function saveForLater() {
   const url = 'https://lastbrick.co.uk/?ref=saved';
   const text = 'Last Brick: find the missing pieces from your old LEGO sets. Free.';
-  if (navigator.share) {
-    try { await navigator.share({ title: 'Last Brick', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+  openSheet(`
+    <div class="later-sheet" role="dialog" aria-modal="true" aria-labelledby="laterTitle">
+      <button class="sheet-x" data-close aria-label="Close">✕</button>
+      <h2 id="laterTitle">Save it for later</h2>
+      <p class="muted">Send yourself the link, so it's there next time you're with your LEGO.</p>
+      ${navigator.share ? '<button class="btn primary block" id="laterShare">📝 Send it to myself <small>Notes, Reminders, WhatsApp…</small></button>' : ''}
+      <button class="btn block ${navigator.share ? '' : 'primary'}" id="laterCopy">🔗 Copy the link</button>
+      <label class="small muted later-lbl" for="laterLink">Or press and hold to copy:</label>
+      <input class="field later-link" id="laterLink" value="${url}" readonly>
+    </div>`);
+  $('#laterLink').onfocus = (e) => e.target.select();
+  if ($('#laterShare')) {
+    $('#laterShare').onclick = async () => {
+      try { await navigator.share({ title: 'Last Brick', text, url }); closeSheet(); } catch (e) {
+        if (!e || e.name !== 'AbortError') $('#laterShare').outerHTML = '<p class="small muted">Sending isn\'t available here. Copy the link instead.</p>';
+      }
+    };
   }
-  try {
-    await navigator.clipboard.writeText(url);
-    toast('Link copied. Paste it into a note or a message to yourself.');
-  } catch {
-    toast('Save this link: lastbrick.co.uk');
-  }
+  $('#laterCopy').onclick = async () => {
+    const ok = await copyText(url);
+    $('#laterCopy').textContent = ok ? '✓ Copied. Paste it into a note or a message to yourself' : 'Copying is blocked here. Press and hold the link below';
+    if (!ok) $('#laterLink').select();
+  };
 }
 
 // "Tap a number" tips on the example: the page dims apart from the part explained.

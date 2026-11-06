@@ -1179,3 +1179,9 @@ body { box-sizing: border-box; min-height: 100vh; min-height: 100lvh; }
 .spot-tip .spot-n { position: absolute; left: 14px; top: 14px; width: 30px; height: 30px; border-radius: 50%; background: #d01012; color: #fff; font-weight: 800; display: grid; place-items: center; }
 .spot-tip .spot-btns { display: flex; justify-content: flex-end; }
 .spotting .demo-num { visibility: hidden; }
+/* Example from a link: no tab bar or back arrow, just the one button (and Save it for later) */
+.focus #tabs, .focus #backBtn { display: none !important; }
+body.focus { padding-bottom: env(safe-area-inset-bottom); }
+.focus .demo-cta { bottom: calc(10px + env(safe-area-inset-bottom)); }
+.demo-later { display: block; margin: 2px auto 0; font-size: 14px; color: var(--muted); padding: 6px; }
+.demo-later b { color: var(--brand); }

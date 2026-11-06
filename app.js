@@ -1123,6 +1123,8 @@ function render() {
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   const back = $('#backBtn');
   back.classList.toggle('hidden', !sub);
+  // The example opened from a link has one job (try it with your own set), so no tab bar or back arrow there.
+  document.body.classList.toggle('focus', r.name === 'demo' && DEMO_FROM_LINK);
   $('#delBtn').classList.add('hidden'); // renderSet shows it for the open set
 
   if (r.name !== 'settings' && r.name !== 'help' && r.name !== 'demo' && (needsOwnKey() || (!state.welcomed && !Object.keys(state.sets).length))) return renderWelcome();
@@ -4769,6 +4771,12 @@ function renderFunnel(f, when) {
         <div><b>${fmtNum(counts.scan || 0)}</b>tried scanning</div>
         <div><b>${fmtNum(counts.how_start || 0)}</b>started from <i>How it works</i></div>
       </div>
+      <h3 class="steps-title">Example opened from a link <span class="muted">(counting since 6 Nov)</span></h3>
+      <div class="funnel-extra">
+        <div><b>${fmtNum(counts.demo_link || 0)}</b>opened it from a link</div>
+        <div><b>${fmtNum(counts.demo_try || 0)}</b>tapped <i>Try it with your own set</i></div>
+        <div><b>${fmtNum(counts.save_later || 0)}</b>tapped <i>Save it for later</i></div>
+      </div>
       <h3 class="steps-title">"Save your…" after the first item <span class="muted">(counting since 1 Nov)</span></h3>
       <div class="funnel-extra">
         <div><b>${fmtNum(counts.first_prompt || 0)}</b>saw it</div>
@@ -5218,6 +5226,22 @@ let demo = null;
 // from the welcome screen: these people haven't seen what Last Brick is yet.
 const DEMO_FROM_LINK = /^#demo\b/.test(location.hash);
 
+// "Save it for later": the phone's share menu (Reminders, Notes, WhatsApp to
+// yourself…), or the link copied where there's no share menu. Nothing is stored.
+async function saveForLater() {
+  const url = 'https://lastbrick.co.uk/?ref=saved';
+  const text = 'Last Brick: find the missing pieces from your old LEGO sets. Free.';
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Last Brick', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('Link copied. Paste it into a note or a message to yourself.');
+  } catch {
+    toast('Save this link: lastbrick.co.uk');
+  }
+}
+
 // "Tap a number" tips on the example: the page dims apart from the part explained.
 const DEMO_TIPS = [
   ['.set-card', 'How complete the set is', 'The bar fills up as you find pieces. This King\'s Castle has {have} of its {need} pieces.'],
@@ -5296,6 +5320,7 @@ async function renderDemo() {
     if (route().name !== 'demo') return;
   }
   funnelStep('demo');
+  if (DEMO_FROM_LINK) funnelStep('demo_link');
   const st = setStats(demo);
   const missing = demo.parts.filter((p) => p.have < p.qty);
   const view = ui.partView;
@@ -5327,7 +5352,9 @@ async function renderDemo() {
     ${missing.length ? grid : `<div class="empty"><div class="big">🎉</div>You found everything! That's how it feels.</div>`}
     <div class="demo-cta">
       <button class="btn primary block" id="demoAdd">${DEMO_FROM_LINK ? 'Try it with your own set' : 'Add a set'}</button>
-      ${DEMO_FROM_LINK ? '' : `<button class="btn block" id="demoFig">${scanFigIcon('scan-ico btn-ico')} Who's this minifigure?</button>`}
+      ${DEMO_FROM_LINK
+        ? '<button class="link-btn demo-later" id="demoLater">Not near your LEGO? <b>Save it for later</b></button>'
+        : `<button class="btn block" id="demoFig">${scanFigIcon('scan-ico btn-ico')} Who's this minifigure?</button>`}
     </div>`;
   if (DEMO_FROM_LINK && missing.length) placeDemoNumbers();
   $('#view').querySelectorAll('.pitem').forEach((el) => {
@@ -5340,7 +5367,8 @@ async function renderDemo() {
       const y = window.scrollY; renderDemo(); window.scrollTo(0, y);
     };
   });
-  $('#demoAdd').onclick = () => { funnelStep('tap_set'); state.welcomed = true; save(); go('#add'); };
+  $('#demoAdd').onclick = () => { if (DEMO_FROM_LINK) funnelStep('demo_try'); funnelStep('tap_set'); state.welcomed = true; save(); go('#add'); };
+  if ($('#demoLater')) $('#demoLater').onclick = () => { funnelStep('save_later'); saveForLater(); };
   if ($('#demoFig')) $('#demoFig').onclick = () => {
     funnelStep('tap_fig');
     state.welcomed = true; save();

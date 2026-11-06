@@ -34,7 +34,7 @@ create table if not exists public.funnel (
 -- The steps that can be counted (updated when a new one is added, e.g. 'demo').
 alter table public.funnel drop constraint if exists funnel_step_check;
 alter table public.funnel add constraint funnel_step_check
-  check (step in ('visit', 'start', 'tap_fig', 'tap_set', 'how', 'how_start', 'scan', 'demo', 'first_item', 'first_prompt', 'first_prompt_create', 'first_prompt_later', 'first_prompt_registered', 'gate', 'register_start', 'registered', 'confirmed'));
+  check (step in ('visit', 'start', 'tap_fig', 'tap_set', 'how', 'how_start', 'scan', 'demo', 'demo_link', 'demo_try', 'save_later', 'first_item', 'first_prompt', 'first_prompt_create', 'first_prompt_later', 'first_prompt_registered', 'gate', 'register_start', 'registered', 'confirmed'));
 alter table public.funnel enable row level security;
 
 drop policy if exists "Anyone can count a step" on public.funnel;

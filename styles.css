@@ -1135,3 +1135,28 @@ body { box-sizing: border-box; min-height: 100vh; min-height: 100lvh; }
 /* Stats: the period every section shows */
 .stats-period { position: sticky; top: calc(var(--topbar-h, 56px) + env(safe-area-inset-top)); z-index: 5; margin-bottom: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.06); }
 .stats-period button { font-size: 13px; padding-left: 4px; padding-right: 4px; }
+
+/* Welcome: "No LEGO to hand?" — a slim third choice (opens the example set) */
+.big-choice.slim { min-height: 0; padding: 9px 12px; gap: 12px; margin: 12px 0 0; border-radius: 16px; background: var(--card); border: 1.5px solid var(--line); color: var(--text); box-shadow: none; text-decoration: none; }
+.big-choice.slim .choice-ico { width: 42px; height: 42px; border-radius: 12px; background: #fdecec; font-size: 24px; }
+.big-choice.slim b { font-size: 16px; margin: 0; }
+.big-choice.slim small { font-size: 13px; color: var(--muted); }
+.big-choice.slim .choice-go { width: 30px; height: 30px; font-size: 18px; background: #fdecec; color: var(--brand); }
+
+/* How it works: a short screen recording in a phone frame */
+.how-video { margin: 0 auto 4px; max-width: 240px; text-align: center; }
+.how-video video { display: block; width: 100%; aspect-ratio: 600 / 1170; object-fit: cover; border-radius: 26px; border: 7px solid #1b1b1f; background: #fff; box-shadow: 0 14px 30px rgba(0,0,0,.18); }
+.how-video figcaption { margin-top: 8px; }
+.how-mini { list-style: none; padding: 0; margin: 14px 0 4px; display: grid; gap: 6px; }
+.how-mini li { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
+.how-mini span { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 13px; font-weight: 800; display: grid; place-items: center; }
+@media (max-height: 900px) {
+  .big-choice.slim { padding: 6px 12px; margin-top: 8px; }
+  .big-choice.slim .choice-ico { width: 36px; height: 36px; font-size: 20px; }
+  .big-choice.slim small { font-size: 12.5px; }
+}
+@media (max-height: 760px) {
+  .big-choice.slim { padding: 4px 10px; margin-top: 6px; }
+  .big-choice.slim b { font-size: 15px; }
+}
+#how { scroll-margin-top: 64px; }

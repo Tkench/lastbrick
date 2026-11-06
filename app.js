@@ -22,8 +22,8 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.13.1';
-const APP_DATE = '2026-11-04';
+const APP_VERSION = '1.14.0';
+const APP_DATE = '2026-11-06';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
 // Cloudflare Web Analytics (cookie-free visitor stats). Paste the site's token here
@@ -1327,12 +1327,23 @@ function renderWelcome() {
       <div><b>Almost every</b>LEGO® set</div>
       <div><b>Free</b>first set, no sign-up</div>
     </div>`}
-    <p class="center small demo-link">No LEGO to hand? <a href="#demo">See an example</a></p>
+    <a class="big-choice slim" id="demoBtn" href="#demo">
+      <span class="choice-ico" aria-hidden="true">🏰</span>
+      <span class="choice-text"><b>No LEGO to hand?</b><small>See it working on a real set</small></span>
+      <span class="choice-go" aria-hidden="true">›</span>
+    </a>
     ${syncEnabled() ? `<p class="center small hero-login">Already have an account? <a href="#settings">Log in</a></p>` : ''}
     <button class="scroll-hint" id="howBtn">How it works <span class="scroll-arrow" aria-hidden="true">↓</span></button>
     </div>
     <section class="welcome-how" id="how">
-    ${swipeCards('steps', HOW_IT_WORKS())}
+    <figure class="how-video">
+      <video id="howVideo" muted loop playsinline preload="none" poster="how-it-works.jpg"
+        aria-label="Last Brick in use: typing set number 6080, adding King's Castle, ticking off pieces, then the Looking for list of missing pieces">
+        <source src="how-it-works.mp4" type="video/mp4">
+      </video>
+      <figcaption class="small muted">A real example: King's Castle (6080)</figcaption>
+    </figure>
+    <ol class="how-mini">${HOW_IT_WORKS().map(([, t], i) => `<li><span>${i + 1}</span>${t}</li>`).join('')}</ol>
     ${needsOwnKey() ? '' : `<button class="btn primary block hero-cta" id="tryNowSet">${scanIcon({ cls: 'scan-ico btn-ico', onRed: true })} Add a set by number</button>
     <button class="btn block hero-cta second" id="tryNow">${scanFigIcon('scan-ico btn-ico')} Scan a minifigure</button>`}
     </section>
@@ -1340,7 +1351,13 @@ function renderWelcome() {
       <a href="about.html">About</a> · <a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Use</a>
       <p>LEGO® is a trademark of the LEGO Group, which does not sponsor or endorse this app.</p>
     </footer>`;
-  bindSwipeCards('steps');
+  // The video plays only while it's on screen (and loads only when first scrolled to).
+  const vid = $('#howVideo');
+  if (vid && 'IntersectionObserver' in window) {
+    new IntersectionObserver((list) => {
+      for (const x of list) { if (x.isIntersecting) vid.play().catch(() => {}); else vid.pause(); }
+    }, { threshold: 0.5 }).observe(vid);
+  }
   $('#howBtn').onclick = () => { funnelStep('how'); $('#how').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   // Counts people who scroll down to "How it works" too, not just those who tap the arrow.
   if ('IntersectionObserver' in window) {

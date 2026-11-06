@@ -1,7 +1,7 @@
 // Offline support: the app itself is network-first (so updates show up),
 // part pictures are cached so the lists still look right without signal.
 // Raise this whenever APP_VERSION in app.js changes.
-const SHELL = 'brickfinder-shell-v95';
+const SHELL = 'brickfinder-shell-v96';
 const IMAGES = 'brickfinder-images-v1';
 const SHELL_FILES = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'privacy.html', 'terms.html'];
 
@@ -18,6 +18,8 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
+  // Videos load in pieces, which the cache can't store: leave them to the browser.
+  if (req.destination === 'video' || req.headers.has('range')) return;
   const url = new URL(req.url);
 
   if (url.origin === location.origin) {

@@ -1160,3 +1160,22 @@ body { box-sizing: border-box; min-height: 100vh; min-height: 100lvh; }
   .big-choice.slim b { font-size: 15px; }
 }
 #how { scroll-margin-top: 64px; }
+
+/* The example, opened straight from a link: a red welcome and tappable numbers */
+.demo-hello { background: linear-gradient(135deg, #e2231a, #b40d10); color: #fff; border-radius: 22px; padding: 18px 18px 16px; margin: 0 0 14px; box-shadow: 0 12px 26px rgba(208,16,18,.3); }
+.demo-hello .tag { display: inline-block; background: #ffd43b; color: #1b1b1f; font-size: 11px; font-weight: 800; letter-spacing: .06em; border-radius: 999px; padding: 3px 9px; margin-bottom: 8px; }
+.demo-hello h2 { font-size: 25px; line-height: 1.15; margin: 0 0 6px; color: #fff; }
+.demo-hello p { margin: 0; font-size: 15px; line-height: 1.4; }
+.demo-hello .hint { margin-top: 10px; font-size: 13.5px; font-weight: 700; opacity: .95; }
+.has-num { position: relative; overflow: visible; }
+.demo-num { position: absolute; z-index: 4; width: 34px; height: 34px; padding: 0; border-radius: 50%; border: 3px solid #fff; background: #d01012; color: #fff; font: 800 16px/1 inherit; display: grid; place-items: center; box-shadow: 0 3px 10px rgba(0,0,0,.3); cursor: pointer; animation: demo-num-pulse 2.2s ease-in-out infinite; }
+@keyframes demo-num-pulse { 0%, 100% { box-shadow: 0 3px 10px rgba(0,0,0,.3), 0 0 0 0 rgba(208,16,18,.45); } 50% { box-shadow: 0 3px 10px rgba(0,0,0,.3), 0 0 0 9px rgba(208,16,18,0); } }
+@media (prefers-reduced-motion: reduce) { .demo-num { animation: none; } }
+.spot-shade { position: fixed; inset: 0; z-index: 70; }
+.spot-hole { position: fixed; z-index: 71; border-radius: 16px; box-shadow: 0 0 0 200vmax rgba(20,20,24,.62); border: 2px solid #fff; transition: all .2s ease; }
+.spot-tip { position: fixed; z-index: 72; left: 16px; right: 16px; max-width: 420px; margin: 0 auto; background: var(--card); color: var(--text); border-radius: 16px; padding: 14px 14px 12px 56px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.spot-tip b { display: block; font-size: 17px; margin-bottom: 4px; }
+.spot-tip p { margin: 0 0 10px; font-size: 14.5px; line-height: 1.4; color: var(--muted); }
+.spot-tip .spot-n { position: absolute; left: 14px; top: 14px; width: 30px; height: 30px; border-radius: 50%; background: #d01012; color: #fff; font-weight: 800; display: grid; place-items: center; }
+.spot-tip .spot-btns { display: flex; justify-content: flex-end; }
+.spotting .demo-num { visibility: hidden; }

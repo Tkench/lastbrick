@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.14.0';
+const APP_VERSION = '1.15.0';
 const APP_DATE = '2026-11-06';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -1112,7 +1112,7 @@ function route() {
 
 function go(hash) { location.hash = hash; }
 
-window.addEventListener('hashchange', () => { closeSheet(); render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { closeSheet(); closeDemoTip(); render(); window.scrollTo(0, 0); });
 
 /* ---------- Rendering ---------- */
 
@@ -5214,8 +5214,74 @@ function renderAccountCard(opts = {}) {
  * saved and no account is needed. */
 const DEMO_SET = '6080-1'; // King's Castle (1988)
 let demo = null;
+// Opened straight from a link (e.g. a video's pinned comment), rather than
+// from the welcome screen: these people haven't seen what Last Brick is yet.
+const DEMO_FROM_LINK = /^#demo\b/.test(location.hash);
+
+// "Tap a number" tips on the example: the page dims apart from the part explained.
+const DEMO_TIPS = [
+  ['.set-card', 'How complete the set is', 'The bar fills up as you find pieces. This King\'s Castle has {have} of its {need} pieces.'],
+  ['.pitem', "Exactly what's missing", 'Every missing piece, with a picture, its colour and how many you still need.'],
+  ['.pitem [data-act="plus"]', 'Found one? Tap +', "It's ticked off straight away. When you've found them all, the piece leaves this list."],
+];
+function closeDemoTip() {
+  document.querySelectorAll('.spot-shade, .spot-hole, .spot-tip').forEach((x) => x.remove());
+  document.body.classList.remove('spotting');
+}
+function showDemoTip(i) {
+  closeDemoTip();
+  const [sel, title, text] = DEMO_TIPS[i];
+  const el = $('#view').querySelector(sel);
+  if (!el) return;
+  el.scrollIntoView({ block: 'center' });
+  const r = el.getBoundingClientRect(), pad = i === 2 ? 6 : 4;
+  const st = setStats(demo);
+  const shade = document.createElement('div');
+  shade.className = 'spot-shade';
+  const hole = document.createElement('div');
+  hole.className = 'spot-hole';
+  Object.assign(hole.style, { left: r.left - pad + 'px', top: r.top - pad + 'px', width: r.width + pad * 2 + 'px', height: r.height + pad * 2 + 'px' });
+  const tip = document.createElement('div');
+  tip.className = 'spot-tip';
+  tip.setAttribute('role', 'dialog');
+  tip.innerHTML = `<span class="spot-n">${i + 1}</span><b>${esc(title)}</b><p>${esc(text.replace('{have}', fmtNum(st.have)).replace('{need}', fmtNum(st.need)))}</p>
+    <div class="spot-btns">${i < DEMO_TIPS.length - 1 ? `<button class="btn small primary" id="spotNext">Next: ${i + 2} ›</button>` : '<button class="btn small primary" id="spotDone">Got it</button>'}</div>`;
+  document.body.append(shade, hole, tip);
+  document.body.classList.add('spotting'); // the numbers hide while a tip shows
+  // Below the part if there's room, otherwise above it.
+  const below = r.bottom + 12 + tip.offsetHeight < innerHeight - 80;
+  tip.style.top = (below ? r.bottom + pad + 10 : Math.max(70, r.top - pad - 10 - tip.offsetHeight)) + 'px';
+  tip.classList.add(below ? 'below' : 'above');
+  shade.onclick = closeDemoTip;
+  hole.onclick = closeDemoTip;
+  if ($('#spotNext')) $('#spotNext').onclick = () => showDemoTip(i + 1);
+  if ($('#spotDone')) $('#spotDone').onclick = closeDemoTip;
+}
+// The red numbers, each attached to the card it explains (so they stay put while pictures load).
+function placeDemoNumbers() {
+  const view = $('#view');
+  const at = (i, box, el, dx, dy) => {
+    if (!box || !el) return;
+    const b = document.createElement('button');
+    b.className = 'demo-num';
+    b.textContent = i + 1;
+    b.setAttribute('aria-label', `What is this? ${DEMO_TIPS[i][1]}`);
+    const p = box.getBoundingClientRect(), r = el.getBoundingClientRect();
+    b.style.left = r.left - p.left + dx(r) + 'px';
+    b.style.top = r.top - p.top + dy(r) + 'px';
+    b.onclick = (e) => { e.stopPropagation(); showDemoTip(i); };
+    box.classList.add('has-num');
+    box.append(b);
+  };
+  const card = view.querySelector('.set-card'), first = view.querySelector('.pitem');
+  at(0, card, card, (r) => r.width - 22, () => -12);
+  at(1, first, first, () => -12, () => -12);
+  at(2, first, first && first.querySelector('[data-act="plus"]'), (r) => r.width - 20, () => -22);
+}
+
 async function renderDemo() {
-  setTitle('Example set');
+  closeDemoTip();
+  if (DEMO_FROM_LINK) { setWelcomeHeader(); document.title = 'A real example – Last Brick'; } else setTitle('Example set');
   if (!demo) {
     $('#view').innerHTML = '<div class="spinner"></div><p class="center muted">Loading an example set…</p>';
     try {
@@ -5237,10 +5303,17 @@ async function renderDemo() {
   const grid = renderPartItems(missing);
   ui.partView = view;
   $('#view').innerHTML = `
+    ${DEMO_FROM_LINK ? `
+    <div class="demo-hello">
+      <span class="tag">REAL EXAMPLE</span>
+      <h2>Welcome to Last Brick 👋</h2>
+      <p>Turn your box of mixed LEGO® back into sets. Here's a real example: <b>${esc(demo.name)} (${esc(demo.year)})</b>, with ${st.missing} pieces still missing.</p>
+      <p class="hint">Tap the red numbers to see what each part shows.</p>
+    </div>` : `
     <div class="demo-banner">
       <b>This is an example</b>
       <span>Here's how a set looks in Last Brick. Tap <b>+</b> when you find a piece. Nothing here is saved.</span>
-    </div>
+    </div>`}
     <div class="card set-card" style="cursor:default">
       ${demo.img ? `<img src="${esc(demo.img)}" alt="">` : ''}
       <div class="grow">
@@ -5253,9 +5326,10 @@ async function renderDemo() {
     <h3 class="steps-title">Still missing</h3>
     ${missing.length ? grid : `<div class="empty"><div class="big">🎉</div>You found everything! That's how it feels.</div>`}
     <div class="demo-cta">
-      <button class="btn primary block" id="demoAdd">Add a set</button>
-      <button class="btn block" id="demoFig">${scanFigIcon('scan-ico btn-ico')} Who's this minifigure?</button>
+      <button class="btn primary block" id="demoAdd">${DEMO_FROM_LINK ? 'Try it with your own set' : 'Add a set'}</button>
+      ${DEMO_FROM_LINK ? '' : `<button class="btn block" id="demoFig">${scanFigIcon('scan-ico btn-ico')} Who's this minifigure?</button>`}
     </div>`;
+  if (DEMO_FROM_LINK && missing.length) placeDemoNumbers();
   $('#view').querySelectorAll('.pitem').forEach((el) => {
     el.onclick = (e) => {
       const act = e.target.closest('[data-act]')?.dataset.act;
@@ -5267,7 +5341,7 @@ async function renderDemo() {
     };
   });
   $('#demoAdd').onclick = () => { funnelStep('tap_set'); state.welcomed = true; save(); go('#add'); };
-  $('#demoFig').onclick = () => {
+  if ($('#demoFig')) $('#demoFig').onclick = () => {
     funnelStep('tap_fig');
     state.welcomed = true; save();
     ui.collection = 'figs'; savePref('collection', 'figs');

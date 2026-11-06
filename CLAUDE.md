@@ -86,7 +86,7 @@ Plain HTML/CSS/JavaScript, no build step.
 
 ## Other services
 
-- Domain at **Namecheap**; `hello@lastbrick.co.uk` (and `social@`, if set up) forward to
+- Domain at **Namecheap**; `hello@lastbrick.co.uk` and `social@lastbrick.co.uk` forward to
   Tracey's Gmail. She replies as hello@ through Gmail "Send mail as" using Brevo
   SMTP (port 465, SSL).
 - Google Search Console verified (meta tag in `index.html`), sitemap submitted.

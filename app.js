@@ -22,7 +22,7 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.15.1';
+const APP_VERSION = '1.15.2';
 const APP_DATE = '2026-11-06';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
@@ -4771,9 +4771,12 @@ function renderFunnel(f, when) {
         <div><b>${fmtNum(counts.scan || 0)}</b>tried scanning</div>
         <div><b>${fmtNum(counts.how_start || 0)}</b>started from <i>How it works</i></div>
       </div>
-      <h3 class="steps-title">Example opened from a link <span class="muted">(counting since 6 Nov)</span></h3>
+      <h3 class="steps-title">The example set <span class="muted">(counting since 6 Nov)</span></h3>
       <div class="funnel-extra">
+        <div><b>${fmtNum(counts.demo || 0)}</b>opened it (from anywhere)</div>
         <div><b>${fmtNum(counts.demo_link || 0)}</b>opened it from a link</div>
+        <div><b>${fmtNum(counts.demo_tip || 0)}</b>tapped a red number</div>
+        <div><b>${fmtNum(counts.demo_plus || 0)}</b>tapped + or − on a piece</div>
         <div><b>${fmtNum(counts.demo_try || 0)}</b>tapped <i>Try it with your own set</i></div>
         <div><b>${fmtNum(counts.save_later || 0)}</b>tapped <i>Save it for later</i></div>
       </div>
@@ -5320,7 +5323,7 @@ function placeDemoNumbers() {
     const p = box.getBoundingClientRect(), r = el.getBoundingClientRect();
     b.style.left = r.left - p.left + dx(r) + 'px';
     b.style.top = r.top - p.top + dy(r) + 'px';
-    b.onclick = (e) => { e.stopPropagation(); showDemoTip(i); };
+    b.onclick = (e) => { e.stopPropagation(); funnelStep('demo_tip'); showDemoTip(i); };
     box.classList.add('has-num');
     box.append(b);
   };
@@ -5389,6 +5392,7 @@ async function renderDemo() {
       const act = e.target.closest('[data-act]')?.dataset.act;
       const p = demo.parts.find((x) => x.key === el.dataset.key);
       if (!p || (act !== 'plus' && act !== 'minus')) return;
+      funnelStep('demo_plus');
       p.have = Math.max(0, Math.min(p.qty, p.have + (act === 'plus' ? 1 : -1)));
       buzz();
       const y = window.scrollY; renderDemo(); window.scrollTo(0, y);

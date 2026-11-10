@@ -22,8 +22,8 @@ const TIP_URL = '';
 // MAJOR.MINOR.PATCH: major = big change in how the app works, minor = new feature,
 // patch = fix or small tweak. Raise it (and the date) with every change, together
 // with the cache name in sw.js, so phones pick up the new version.
-const APP_VERSION = '1.15.2';
-const APP_DATE = '2026-11-06';
+const APP_VERSION = '1.15.3';
+const APP_DATE = '2026-11-10';
 const SUPABASE_URL = 'https://nioytuzuejdzznaxvlic.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_vWTdvZvwYgGsKhE0m7DbPg_MP_UbMqr';
 // Cloudflare Web Analytics (cookie-free visitor stats). Paste the site's token here
@@ -3545,7 +3545,9 @@ function renderSwapBox(set) {
     </div>`;
 }
 
-function renderSet(setNum) {
+// keep: after tapping + or −, keep every piece where it was (the order is only
+// worked out again when the page is opened, or the tab or sort changes).
+function renderSet(setNum, { keep = false } = {}) {
   const set = state.sets[setNum];
   if (!set) { go('#sets'); return; }
   setTitle(set.name);
@@ -3553,7 +3555,7 @@ function renderSet(setNum) {
   const f = ui.setFilter;
   if (ui.partSetNum !== setNum) { ui.partSetNum = setNum; ui.partColor = ''; ui.partType = ''; }
   const inFilter = set.parts.filter((p) =>
-    f === 'all' ? true : f === 'missing' ? p.have < p.qty : p.have >= p.qty);
+    f === 'all' ? true : f === 'missing' ? p.have < p.qty : p.have > 0);
 
   if (ui.partColor && !inFilter.some((p) => p.colorName === ui.partColor)) ui.partColor = '';
   if (ui.partType && !inFilter.some((p) => pieceType(p) === ui.partType)) ui.partType = '';
@@ -3601,7 +3603,7 @@ function renderSet(setNum) {
     <div class="set-controls">
       <div class="seg" id="filter">
         <button data-f="missing" class="${f === 'missing' ? 'active' : ''}">Missing (${st.kindsMissing})</button>
-        <button data-f="have" class="${f === 'have' ? 'active' : ''}">Have (${st.kinds - st.kindsMissing})</button>
+        <button data-f="have" class="${f === 'have' ? 'active' : ''}">Have (${set.parts.filter((p) => p.have > 0).length})</button>
         <button data-f="all" class="${f === 'all' ? 'active' : ''}">All (${st.kinds})</button>
       </div>
       ${sortFilterButton((ui.partColor ? 1 : 0) + (ui.partType ? 1 : 0))}
@@ -3616,7 +3618,17 @@ function renderSet(setNum) {
       ? `<div class="empty"><div class="big">🎉</div>Nothing missing — this ${noun(set)} is complete!</div>`
       : `<div class="empty">No pieces here.</div>`;
   } else {
-    for (const g of groupParts(parts)) {
+    const groups = groupParts(parts);
+    const frozen = keep && ui.partOrder && ui.partOrder.setNum === setNum ? ui.partOrder.pos : null;
+    if (frozen) {
+      const at = (x) => (frozen.has(x.key) ? frozen.get(x.key) : 1e9);
+      groups.forEach((g) => g.items.sort((a, b) => at(a) - at(b)));
+    } else {
+      const pos = new Map();
+      groups.forEach((g) => g.items.forEach((x) => pos.set(x.key, pos.size)));
+      ui.partOrder = { setNum, pos };
+    }
+    for (const g of groups) {
       if (g.title) html += `<h3 class="part-group">${g.rgb ? swatch(g.rgb) : ''}${esc(g.title)} <span class="muted">(${g.items.length})</span></h3>`;
       html += renderPartItems(g.items);
     }
@@ -3661,9 +3673,14 @@ function renderSet(setNum) {
       if (act === 'view') { showSetPartSheet(setNum, p.key, rerender); return; }
       if (act === 'plus') changeHave(setNum, p.key, 1);
       if (act === 'minus') changeHave(setNum, p.key, -1);
+      // Redraw with nothing moving: the piece you tapped stays exactly where it was
+      // (it only leaves Missing once none are needed, or Have once none are found).
+      const top = el.getBoundingClientRect().top;
       const y = window.scrollY;
-      renderSet(setNum);
-      window.scrollTo(0, y);
+      renderSet(setNum, { keep: true });
+      const again = $('#view').querySelector(`.pitem[data-key="${CSS.escape(p.key)}"]`);
+      if (again) window.scrollTo(0, window.scrollY + again.getBoundingClientRect().top - top);
+      else window.scrollTo(0, y);
     };
   });
   $('#allHave').onclick = async () => {
